@@ -21,6 +21,7 @@ class ShadSelectItem<T> {
 
 /// Canonical ShadCN-style select / dropdown field.
 class ShadSelect<T> extends FormField<T> {
+  final T? value;
   final String? label;
   final String placeholder;
   final List<ShadSelectItem<T>> items;
@@ -33,7 +34,7 @@ class ShadSelect<T> extends FormField<T> {
     this.label,
     this.placeholder = 'Select an option',
     required this.items,
-    T? value,
+    this.value,
     this.onChanged,
     this.enableSearch = false,
     this.prefixIcon,
@@ -45,8 +46,9 @@ class ShadSelect<T> extends FormField<T> {
             final context = state.context;
             final isEnabled = state.widget.enabled;
             final tokens = context.shad;
+            final effectiveValue = state.value;
             final selectedItem = items.cast<ShadSelectItem<T>?>().firstWhere(
-                  (item) => item?.value == state.value,
+                  (item) => item?.value == effectiveValue,
                   orElse: () => null,
                 );
             final hasError = state.hasError;
@@ -59,7 +61,7 @@ class ShadSelect<T> extends FormField<T> {
                 builder: (ctx) => _ShadSelectSheet<T>(
                   title: label ?? 'Select Option',
                   items: items,
-                  selectedValue: state.value,
+                  selectedValue: effectiveValue,
                   enableSearch: enableSearch,
                 ),
               );
@@ -145,6 +147,22 @@ class ShadSelect<T> extends FormField<T> {
             );
           },
         );
+
+  @override
+  FormFieldState<T> createState() => _ShadSelectState<T>();
+}
+
+class _ShadSelectState<T> extends FormFieldState<T> {
+  @override
+  ShadSelect<T> get widget => super.widget as ShadSelect<T>;
+
+  @override
+  void didUpdateWidget(covariant ShadSelect<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value) {
+      setValue(widget.value);
+    }
+  }
 }
 
 class _ShadSelectSheet<T> extends StatefulWidget {
@@ -216,23 +234,26 @@ class _ShadSelectSheetState<T> extends State<_ShadSelectSheet<T>> {
                         final item = filtered[index];
                         final isSelected = item.value == widget.selectedValue;
 
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          leading: item.icon,
-                          title: Text(
-                            item.label,
-                            style: tokens.typography.p.copyWith(
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                              color: isSelected ? tokens.primary : tokens.foreground,
+                        return Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            leading: item.icon,
+                            title: Text(
+                              item.label,
+                              style: tokens.typography.p.copyWith(
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                                color: isSelected ? tokens.primary : tokens.foreground,
+                              ),
                             ),
+                            subtitle: item.subtitle != null
+                                ? Text(item.subtitle!, style: tokens.typography.muted)
+                                : null,
+                            trailing: isSelected
+                                ? Icon(Icons.check, size: 18, color: tokens.primary)
+                                : null,
+                            onTap: () => Navigator.of(context).pop(item.value),
                           ),
-                          subtitle: item.subtitle != null
-                              ? Text(item.subtitle!, style: tokens.typography.muted)
-                              : null,
-                          trailing: isSelected
-                              ? Icon(Icons.check, size: 18, color: tokens.primary)
-                              : null,
-                          onTap: () => Navigator.of(context).pop(item.value),
                         );
                       },
                     ),

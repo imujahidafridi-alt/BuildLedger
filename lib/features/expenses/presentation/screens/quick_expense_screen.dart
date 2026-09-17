@@ -7,6 +7,9 @@ import 'package:build_ledger/features/expenses/domain/entities/expense.dart';
 import 'package:build_ledger/features/expenses/presentation/controllers/expense_controller.dart';
 import 'package:build_ledger/features/projects/presentation/controllers/project_controller.dart';
 import 'package:build_ledger/features/suppliers/presentation/controllers/supplier_controller.dart';
+import 'package:build_ledger/features/expenses/domain/entities/expense_category.dart';
+import 'package:build_ledger/core/logging/app_logger.dart';
+import 'package:build_ledger/shared/ui/forms/shad_category_selector.dart';
 import 'package:build_ledger/shared/ui/shad_ui.dart';
 
 class QuickExpenseScreen extends ConsumerStatefulWidget {
@@ -20,6 +23,7 @@ class _QuickExpenseScreenState extends ConsumerState<QuickExpenseScreen> {
   final _amountController = TextEditingController();
   final _amountFocusNode = FocusNode();
   String? _selectedCategoryId;
+  ExpenseCategory? _selectedCategory;
   String? _selectedSupplierId;
   PaymentMethod _paymentMethod = PaymentMethod.cash;
   bool _isSaving = false;
@@ -32,24 +36,36 @@ class _QuickExpenseScreenState extends ConsumerState<QuickExpenseScreen> {
   }
 
   Future<void> _submit() async {
-    final activeProject = ref.read(selectedProjectProvider);
+    if (_isSaving) return;
+
+    final activeProject = ref.read(selectedProjectProvider) ??
+        ref.read(projectsListProvider).value?.firstOrNull;
     if (activeProject == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select or create an active project first')),
+        SnackBar(
+          content: const Text('Please select or create an active project first'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
       return;
     }
 
     if (_amountController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter an amount')),
+        SnackBar(
+          content: const Text('Please enter an amount'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
       return;
     }
 
     if (_selectedCategoryId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please tap a category')),
+        SnackBar(
+          content: const Text('Please tap a category'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
       return;
     }
@@ -78,7 +94,31 @@ class _QuickExpenseScreenState extends ConsumerState<QuickExpenseScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Expense saved successfully!')),
         );
-        context.pop();
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          try {
+            context.pop();
+          } catch (_) {}
+        }
+      } else if (mounted) {
+        final error = ref.read(expenseControllerProvider).error;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error?.toString() ?? 'Unable to save expense. Please try again.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e, st) {
+      AppLogger.error('Quick expense failed', tag: 'QuickExpenseScreen', error: e, stackTrace: st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving expense: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -88,13 +128,16 @@ class _QuickExpenseScreenState extends ConsumerState<QuickExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     final activeProject = ref.watch(selectedProjectProvider);
+    final projects = ref.watch(projectsListProvider).value ?? [];
+    final effectiveProject = activeProject ?? (projects.isNotEmpty ? projects.first : null);
     final categories = ref.watch(expenseCategoriesProvider).value ?? [];
+    final recentCategories = ref.watch(recentCategoriesProvider).value ?? [];
     final suppliers = ref.watch(suppliersListProvider).value ?? [];
     final tokens = context.shad;
     final dynamicBottomPadding = MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 16;
 
-    // Top 8 frequent construction categories for 1-tap selection
-    final quickCategories = categories.take(8).toList();
+    // Dynamically derived 6 quick categories (most recent / frequent or defaults)
+    final quickCategories = (recentCategories.isNotEmpty ? recentCategories : categories).take(6).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -120,7 +163,7 @@ class _QuickExpenseScreenState extends ConsumerState<QuickExpenseScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      activeProject != null ? 'Project: ${activeProject.name}' : 'No active project selected',
+                      effectiveProject != null ? 'Project: ${effectiveProject.name}' : 'No active project selected',
                       style: tokens.typography.p.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -140,56 +183,94 @@ class _QuickExpenseScreenState extends ConsumerState<QuickExpenseScreen> {
             ),
             const SizedBox(height: 20),
 
-          // 1-Tap Category Grid
-          Text(
-            'SELECT CATEGORY *',
-            style: tokens.typography.small.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: tokens.mutedForeground,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: quickCategories.map((cat) {
-              final isSelected = _selectedCategoryId == cat.id;
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: () {
-                    setState(() => _selectedCategoryId = isSelected ? null : cat.id);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isSelected ? tokens.primary : tokens.card,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isSelected ? tokens.primary : tokens.border,
-                        width: 1,
-                      ),
+            // 1-Tap Quick Categories
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'QUICK CATEGORY *',
+                  style: tokens.typography.small.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: tokens.mutedForeground,
+                  ),
+                ),
+                if (_selectedCategory != null)
+                  Text(
+                    _selectedCategory!.name,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: tokens.primary,
                     ),
-                    child: Text(
-                      cat.name,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected ? tokens.primaryForeground : tokens.foreground,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: quickCategories.map((cat) {
+                final isSelected = _selectedCategoryId == cat.id;
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          _selectedCategoryId = null;
+                          _selectedCategory = null;
+                        } else {
+                          _selectedCategoryId = cat.id;
+                          _selectedCategory = cat;
+                        }
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? tokens.primary : tokens.card,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected ? tokens.primary : tokens.border,
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        cat.name,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? tokens.primaryForeground : tokens.foreground,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 20),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
 
-          // Supplier Dropdown
-          ShadSelect<String?>(
-            label: 'Supplier / Vendor (Optional)',
+            // Browse All Categories Trigger
+            ShadCategorySelector(
+              label: null,
+              placeholder: 'Browse All Categories...',
+              value: _selectedCategory,
+              categories: categories,
+              recentCategories: recentCategories,
+              onChanged: (cat) {
+                setState(() {
+                  _selectedCategory = cat;
+                  _selectedCategoryId = cat?.id;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // Supplier Dropdown
+            ShadSelect<String?>(
+              label: 'Supplier / Vendor (Optional)',
             placeholder: 'No Supplier / Site Cash',
             value: _selectedSupplierId,
             enableSearch: true,

@@ -75,20 +75,24 @@ class DashboardQueryDao {
         ? ((actualCost.minorUnits / budget.minorUnits) * 100).round()
         : 0;
 
-    // 6. Category Breakdown
+    // 6. Top 5 Category Breakdown (Top-Level Category aggregation)
     final categoryRows = await db.rawQuery('''
-      SELECT c.group_name, COALESCE(SUM(e.amount_minor), 0) as group_total
+      SELECT 
+        COALESCE(parent.name, c.name) as top_category_name,
+        COALESCE(SUM(e.amount_minor), 0) as category_total
       FROM expenses e
       JOIN expense_categories c ON e.category_id = c.id
+      LEFT JOIN expense_categories parent ON c.parent_id = parent.id
       WHERE e.status = 'active' AND e.project_id = ?
-      GROUP BY c.group_name
-      ORDER BY group_total DESC
+      GROUP BY top_category_name
+      ORDER BY category_total DESC
+      LIMIT 5
     ''', [projectId]);
 
     final categoryBreakdown = <String, Money>{};
     for (final row in categoryRows) {
-      final group = row['group_name'] as String;
-      final total = Money.fromMinor(row['group_total'] as int);
+      final group = row['top_category_name'] as String;
+      final total = Money.fromMinor(row['category_total'] as int);
       categoryBreakdown[group] = total;
     }
 
@@ -97,11 +101,14 @@ class DashboardQueryDao {
       SELECT 
         e.*,
         c.name as category_name,
-        c.group_name as group_name,
+        parent.name as parent_category_name,
+        c.phase as phase,
+        COALESCE(parent.name, c.name) as group_name,
         s.name as supplier_name,
         p.name as project_name
       FROM expenses e
       JOIN expense_categories c ON e.category_id = c.id
+      LEFT JOIN expense_categories parent ON c.parent_id = parent.id
       LEFT JOIN suppliers s ON e.supplier_id = s.id
       JOIN projects p ON e.project_id = p.id
       WHERE e.status = 'active' AND e.project_id = ?

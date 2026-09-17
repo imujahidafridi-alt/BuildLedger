@@ -15,19 +15,17 @@ class AppExpenseTile extends StatelessWidget {
   });
 
   IconData _getCategoryIcon(String? group) {
-    switch (group?.toLowerCase()) {
-      case 'materials':
-        return Icons.construction;
-      case 'labour':
-        return Icons.engineering;
-      case 'equipment':
-        return Icons.precision_manufacturing;
-      case 'transport':
-        return Icons.local_shipping;
-      case 'other':
-      default:
-        return Icons.receipt_long;
+    final g = group?.toLowerCase() ?? '';
+    if (g.contains('material') || g.contains('grey') || g.contains('structure') || g.contains('masonry')) {
+      return Icons.construction_outlined;
+    } else if (g.contains('finish') || g.contains('tile') || g.contains('paint') || g.contains('sanitary')) {
+      return Icons.palette_outlined;
+    } else if (g.contains('external') || g.contains('earth') || g.contains('site')) {
+      return Icons.landscape_outlined;
+    } else if (g.contains('prof') || g.contains('labour') || g.contains('contract')) {
+      return Icons.engineering_outlined;
     }
+    return Icons.receipt_long_outlined;
   }
 
   @override
@@ -35,9 +33,20 @@ class AppExpenseTile extends StatelessWidget {
     final tokens = context.shad;
     final isVoided = expense.isVoided;
 
+    final subtitleParts = <String>[];
+    if (expense.categoryGroupName != null && expense.categoryGroupName != expense.categoryName) {
+      subtitleParts.add(expense.categoryGroupName!);
+    }
+    if (expense.supplierName != null) {
+      subtitleParts.add(expense.supplierName!);
+    } else if (expense.description != null && expense.description!.isNotEmpty) {
+      subtitleParts.add(expense.description!);
+    }
+    final subtitle = subtitleParts.isNotEmpty ? subtitleParts.join(' · ') : 'General site purchase';
+
     return ShadTransactionTile(
       title: expense.categoryName ?? 'Construction Expense',
-      subtitle: expense.supplierName ?? expense.description ?? 'General site purchase',
+      subtitle: subtitle,
       date: expense.expenseDate,
       amount: expense.amount,
       direction: TransactionDirection.outflow,

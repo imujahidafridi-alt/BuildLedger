@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:build_ledger/core/domain/money.dart';
 import 'package:build_ledger/features/projects/domain/entities/project.dart';
+import 'package:build_ledger/features/expenses/domain/entities/expense_category.dart';
+import 'package:build_ledger/shared/ui/forms/shad_category_selector.dart';
 import 'package:build_ledger/shared/ui/shad_ui.dart';
 
 /// Permanent visual regression & design system gallery playground.
@@ -23,6 +25,106 @@ class _DesignSystemGalleryScreenState extends State<DesignSystemGalleryScreen> {
   int _selectedTab = 0;
   bool _buttonLoading = false;
   bool _switchValue = true;
+
+  // Category Selector Demo Data & States
+  static final _galleryCategories = [
+    ExpenseCategory(
+      id: 'cat_materials',
+      name: 'Building Materials',
+      code: 'BUILDING_MATERIALS',
+      phase: CostPhase.greyStructure,
+      sortOrder: 5,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+    ExpenseCategory(
+      id: 'cat_cement',
+      parentId: 'cat_materials',
+      name: 'Cement',
+      code: 'MAT_CEMENT',
+      phase: CostPhase.greyStructure,
+      sortOrder: 1,
+      aliases: ['cement', 'simant', 'chuna'],
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+    ExpenseCategory(
+      id: 'cat_steel',
+      parentId: 'cat_materials',
+      name: 'Steel / Saria',
+      code: 'MAT_STEEL',
+      phase: CostPhase.greyStructure,
+      sortOrder: 2,
+      aliases: ['saria', 'rebar', 'iron', 'loha'],
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+    ExpenseCategory(
+      id: 'cat_plumbing',
+      name: 'Plumbing & Drainage',
+      code: 'PLUMBING_DRAINAGE',
+      phase: CostPhase.greyStructure,
+      sortOrder: 8,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+    ExpenseCategory(
+      id: 'cat_pipes',
+      parentId: 'cat_plumbing',
+      name: 'Pipes & Fittings',
+      code: 'PLUMB_PIPES',
+      phase: CostPhase.greyStructure,
+      sortOrder: 1,
+      aliases: ['pipe', 'pvc', 'cpvc', 'tanki'],
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+    ExpenseCategory(
+      id: 'cat_finishing_tiles',
+      name: 'Flooring & Tiles',
+      code: 'FLOORING_TILES',
+      phase: CostPhase.finishing,
+      sortOrder: 11,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+    ExpenseCategory(
+      id: 'cat_porcelain_tiles',
+      parentId: 'cat_finishing_tiles',
+      name: 'Porcelain & Ceramic Tiles',
+      code: 'TILES_CERAMIC',
+      phase: CostPhase.finishing,
+      sortOrder: 1,
+      aliases: ['tile', 'marbal', 'marble'],
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+    ExpenseCategory(
+      id: 'cat_long_parent',
+      name: 'Waterproofing, Thermal Insulation, Damp Proofing & Chemical Coatings',
+      code: 'WATERPROOFING_INSULATION',
+      phase: CostPhase.greyStructure,
+      sortOrder: 7,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+    ExpenseCategory(
+      id: 'cat_long_sub',
+      parentId: 'cat_long_parent',
+      name: 'Bituminous Coating & Specialized Multi-Layer Membrane Treatment with Protective Screed',
+      code: 'WATERPROOF_BITUMEN_MEMBRANE',
+      phase: CostPhase.greyStructure,
+      sortOrder: 1,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ),
+  ];
+
+  ExpenseCategory? _demoEmptyCat;
+  ExpenseCategory? _demoSelectedCat = _galleryCategories[1]; // Cement
+  ExpenseCategory? _demoRecentCat = _galleryCategories[2]; // Steel / Saria
+  ExpenseCategory? _demoNestedCat = _galleryCategories[6]; // Porcelain Tiles
+  ExpenseCategory? _demoLongNameCat = _galleryCategories[8]; // Long Subcategory
 
   @override
   void dispose() {
@@ -506,6 +608,70 @@ class _DesignSystemGalleryScreenState extends State<DesignSystemGalleryScreen> {
             title: 'Database Read Error',
             message: 'Unable to decrypt local storage ledger. Verify password or passphrase.',
             retryLabel: 'Re-authenticate',
+          ),
+
+          // 13. ShadCategorySelector (Hierarchy, Search, States)
+          _buildCategoryHeader(context, '13. ShadCategorySelector (Hierarchical Taxonomy)'),
+          ShadCategorySelector(
+            label: '1. Empty State (Placeholder)',
+            placeholder: 'Select expense category...',
+            value: _demoEmptyCat,
+            categories: _galleryCategories,
+            onChanged: (cat) => setState(() => _demoEmptyCat = cat),
+          ),
+          const SizedBox(height: 12),
+          ShadCategorySelector(
+            label: '2. Selected State (Leaf Item)',
+            value: _demoSelectedCat,
+            categories: _galleryCategories,
+            onChanged: (cat) => setState(() => _demoSelectedCat = cat),
+          ),
+          const SizedBox(height: 12),
+          ShadCategorySelector(
+            label: '3. Searching & Urdu Aliases (Interactive Sheet)',
+            placeholder: 'Tap to test searching (saria, rebar, simant)...',
+            value: _demoRecentCat,
+            categories: _galleryCategories,
+            recentCategories: [_galleryCategories[1], _galleryCategories[2], _galleryCategories[4]],
+            onChanged: (cat) => setState(() => _demoRecentCat = cat),
+          ),
+          const SizedBox(height: 12),
+          ShadCategorySelector(
+            label: '4. Recent Categories Bar (Inside Sheet)',
+            value: _demoRecentCat,
+            categories: _galleryCategories,
+            recentCategories: [_galleryCategories[1], _galleryCategories[2]],
+            onChanged: (cat) => setState(() => _demoRecentCat = cat),
+          ),
+          const SizedBox(height: 12),
+          ShadCategorySelector(
+            label: '5. Nested Subcategory (Parent · Subcategory Display)',
+            value: _demoNestedCat,
+            categories: _galleryCategories,
+            onChanged: (cat) => setState(() => _demoNestedCat = cat),
+          ),
+          const SizedBox(height: 12),
+          ShadCategorySelector(
+            label: '6. Disabled State',
+            value: _demoSelectedCat,
+            enabled: false,
+            categories: _galleryCategories,
+            onChanged: (_) {},
+          ),
+          const SizedBox(height: 12),
+          ShadCategorySelector(
+            label: '7. Error State (Form Validation)',
+            value: null,
+            errorText: 'Expense category is required for financial reconciliation',
+            categories: _galleryCategories,
+            onChanged: (_) {},
+          ),
+          const SizedBox(height: 12),
+          ShadCategorySelector(
+            label: '8. Long Names (Responsive Truncation & Ellipsis)',
+            value: _demoLongNameCat,
+            categories: _galleryCategories,
+            onChanged: (cat) => setState(() => _demoLongNameCat = cat),
           ),
         ],
       ),

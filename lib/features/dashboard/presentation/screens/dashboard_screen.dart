@@ -105,7 +105,7 @@ class DashboardScreen extends ConsumerWidget {
                       children: [
                         Expanded(
                           child: ShadButton(
-                            label: '+ Expense',
+                            label: 'Expense',
                             icon: const Icon(Icons.add),
                             variant: ShadButtonVariant.primary,
                             size: ShadButtonSize.medium,
@@ -115,7 +115,7 @@ class DashboardScreen extends ConsumerWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: ShadButton.outline(
-                            label: '+ Labour',
+                            label: 'Labour',
                             icon: const Icon(Icons.engineering),
                             size: ShadButtonSize.medium,
                             onPressed: () => context.push('/labour/new'),
@@ -123,7 +123,7 @@ class DashboardScreen extends ConsumerWidget {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: ShadButton.ghost(
+                          child: ShadButton.outline(
                             label: 'Vendors',
                             icon: const Icon(Icons.store),
                             size: ShadButtonSize.medium,

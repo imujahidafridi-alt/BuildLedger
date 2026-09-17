@@ -8,6 +8,7 @@ import 'package:build_ledger/features/projects/presentation/screens/project_deta
 import 'package:build_ledger/features/expenses/presentation/screens/expense_list_screen.dart';
 import 'package:build_ledger/features/expenses/presentation/screens/expense_form_screen.dart';
 import 'package:build_ledger/features/expenses/presentation/screens/quick_expense_screen.dart';
+import 'package:build_ledger/features/expenses/presentation/screens/category_management_screen.dart';
 import 'package:build_ledger/features/suppliers/presentation/screens/supplier_list_screen.dart';
 import 'package:build_ledger/features/suppliers/presentation/screens/supplier_detail_ledger_screen.dart';
 import 'package:build_ledger/features/suppliers/domain/entities/supplier.dart';
@@ -142,6 +143,11 @@ final appRouter = GoRouter(
       path: '/backup',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const BackupRestoreScreen(),
+    ),
+    GoRoute(
+      path: '/categories',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const CategoryManagementScreen(),
     ),
     GoRoute(
       path: '/design-system',

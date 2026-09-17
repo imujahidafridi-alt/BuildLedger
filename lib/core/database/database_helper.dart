@@ -1,14 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:build_ledger/core/logging/app_logger.dart';
 import 'package:build_ledger/core/database/database_factory.dart';
+import 'package:build_ledger/features/expenses/data/datasources/category_seeds.dart';
 
 /// Central database helper managing SQLite lifecycle, WAL mode, foreign keys, and migrations.
 class DatabaseHelper {
   static const String _databaseName = 'build_ledger.db';
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 2;
 
   static DatabaseHelper? _instance;
   static Database? _database;
@@ -67,7 +69,22 @@ class DatabaseHelper {
       onConfigure: _onConfigure,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onOpen: _onOpen,
     );
+  }
+
+  /// Defensive integrity check: ensures categories exist without expensive repeated work.
+  Future<void> _onOpen(Database db) async {
+    try {
+      final rows = await db.rawQuery('SELECT COUNT(*) as count FROM expense_categories;');
+      final count = rows.isNotEmpty ? (rows.first['count'] as int?) : 0;
+      if (count == null || count == 0) {
+        AppLogger.warning('No expense categories found on open; seeding canonical taxonomy...', tag: 'DatabaseHelper');
+        await seedCategories(db);
+      }
+    } catch (e) {
+      AppLogger.warning('Defensive category count check skipped: $e', tag: 'DatabaseHelper');
+    }
   }
 
   /// Configures connection pragmas (Foreign keys and WAL mode)
@@ -92,7 +109,9 @@ class DatabaseHelper {
 
   /// Creates schema and seeds categories. Available for test DB setup.
   @visibleForTesting
-  static Future<void> createSchema(Database db, [int version = 1]) async {
+  /// Creates schema and seeds categories. Available for test DB setup.
+  @visibleForTesting
+  static Future<void> createSchema(Database db, [int version = _databaseVersion]) async {
     AppLogger.info('Creating SQLite tables for v$version', tag: 'DatabaseHelper');
 
     final batch = db.batch();
@@ -121,17 +140,37 @@ class DatabaseHelper {
     ''');
 
     // 2. Expense Categories Table
-    batch.execute('''
-      CREATE TABLE expense_categories (
-        id TEXT PRIMARY KEY NOT NULL,
-        name TEXT NOT NULL,
-        group_name TEXT NOT NULL,
-        icon_name TEXT,
-        is_custom INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        CONSTRAINT uq_category_name_group UNIQUE (name, group_name)
-      );
-    ''');
+    if (version < 2) {
+      batch.execute('''
+        CREATE TABLE expense_categories (
+          id TEXT PRIMARY KEY NOT NULL,
+          name TEXT NOT NULL,
+          group_name TEXT NOT NULL,
+          icon_name TEXT,
+          is_custom INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          CONSTRAINT uq_category_name_group UNIQUE (name, group_name)
+        );
+      ''');
+    } else {
+      batch.execute('''
+        CREATE TABLE expense_categories (
+          id TEXT PRIMARY KEY NOT NULL,
+          parent_id TEXT REFERENCES expense_categories(id) ON DELETE RESTRICT,
+          name TEXT NOT NULL,
+          code TEXT NOT NULL,
+          phase TEXT NOT NULL,
+          icon_name TEXT,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          is_system INTEGER NOT NULL DEFAULT 1,
+          aliases TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          CONSTRAINT uq_category_code UNIQUE (code)
+        );
+      ''');
+    }
 
     // 3. Suppliers Table
     batch.execute('''
@@ -247,16 +286,95 @@ class DatabaseHelper {
     batch.execute('CREATE INDEX idx_supplier_ledger_supplier ON supplier_ledger(supplier_id, entry_date);');
     batch.execute('CREATE INDEX idx_labour_project_status ON labour_entries(project_id, status, entry_date);');
 
+    if (version >= 2) {
+      batch.execute('CREATE INDEX idx_expense_categories_parent ON expense_categories(parent_id);');
+      batch.execute('CREATE INDEX idx_expense_categories_phase ON expense_categories(phase);');
+      batch.execute('CREATE INDEX idx_expense_categories_active ON expense_categories(is_active);');
+    }
+
     await batch.commit(noResult: true);
 
-    // Seed Standard Construction Categories
-    await seedCategories(db);
+    // Seed Categories
+    if (version < 2) {
+      await _seedLegacyV1Categories(db);
+    } else {
+      await seedCategories(db);
+    }
   }
 
-  static Future<void> seedCategories(Database db) async {
+  /// Seeds or updates canonical hierarchical categories idempotently.
+  static Future<void> seedCategories(DatabaseExecutor db) async {
+    final now = DateTime.now().toIso8601String();
+
+    // Query existing IDs to determine insert vs update
+    final existingRows = await db.query('expense_categories', columns: ['id']);
+    final existingIds = existingRows.map((r) => r['id'] as String).toSet();
+
+    final batch = db.batch();
+
+    // 1. Top-Level Categories
+    final topLevelSeeds = kDefaultCategoryTaxonomy.where((s) => s.parentCode == null).toList();
+    final Map<String, String> codeToId = {};
+
+    for (final seed in topLevelSeeds) {
+      codeToId[seed.code] = seed.id;
+      final row = {
+        'id': seed.id,
+        'parent_id': null,
+        'name': seed.name,
+        'code': seed.code,
+        'phase': seed.phase.code,
+        'icon_name': seed.iconName,
+        'sort_order': seed.sortOrder,
+        'is_active': 1,
+        'is_system': 1,
+        'aliases': jsonEncode(seed.aliases),
+        'updated_at': now,
+      };
+
+      if (existingIds.contains(seed.id)) {
+        batch.update('expense_categories', row, where: 'id = ?', whereArgs: [seed.id]);
+      } else {
+        row['created_at'] = now;
+        batch.insert('expense_categories', row);
+      }
+    }
+
+    // 2. Subcategories
+    final subSeeds = kDefaultCategoryTaxonomy.where((s) => s.parentCode != null).toList();
+    for (final seed in subSeeds) {
+      codeToId[seed.code] = seed.id;
+      final parentId = codeToId[seed.parentCode!];
+      final row = {
+        'id': seed.id,
+        'parent_id': parentId,
+        'name': seed.name,
+        'code': seed.code,
+        'phase': seed.phase.code,
+        'icon_name': seed.iconName,
+        'sort_order': seed.sortOrder,
+        'is_active': 1,
+        'is_system': 1,
+        'aliases': jsonEncode(seed.aliases),
+        'updated_at': now,
+      };
+
+      if (existingIds.contains(seed.id)) {
+        batch.update('expense_categories', row, where: 'id = ?', whereArgs: [seed.id]);
+      } else {
+        row['created_at'] = now;
+        batch.insert('expense_categories', row);
+      }
+    }
+
+    await batch.commit(noResult: true);
+    AppLogger.info('Seeded/verified ${kDefaultCategoryTaxonomy.length} category taxonomy items', tag: 'DatabaseHelper');
+  }
+
+  /// Seeds legacy v1 categories (used when creating a v1 test database).
+  static Future<void> _seedLegacyV1Categories(Database db) async {
     final now = DateTime.now().toIso8601String();
     final categories = [
-      // Materials
       ('cat_mat_cement', 'Cement', 'Materials', 'square_foot'),
       ('cat_mat_steel', 'Steel', 'Materials', 'hardware'),
       ('cat_mat_bricks', 'Bricks', 'Materials', 'view_module'),
@@ -271,8 +389,6 @@ class DatabaseHelper {
       ('cat_mat_plumbing', 'Plumbing Materials', 'Materials', 'plumbing'),
       ('cat_mat_electrical', 'Electrical Materials', 'Materials', 'electrical_services'),
       ('cat_mat_hardware', 'Hardware / Fixtures', 'Materials', 'build'),
-
-      // Labour
       ('cat_lab_mason', 'Mason (Mistri)', 'Labour', 'engineering'),
       ('cat_lab_general', 'General Labour (Mazdoor)', 'Labour', 'group'),
       ('cat_lab_plumber', 'Plumber', 'Labour', 'plumbing'),
@@ -280,23 +396,17 @@ class DatabaseHelper {
       ('cat_lab_carpenter', 'Carpenter', 'Labour', 'carpenter'),
       ('cat_lab_painter', 'Painter', 'Labour', 'format_paint'),
       ('cat_lab_welder', 'Welder', 'Labour', 'hardware'),
-
-      // Equipment
       ('cat_eq_excavator', 'Excavator', 'Equipment', 'precision_manufacturing'),
       ('cat_eq_mixer', 'Concrete Mixer', 'Equipment', 'sync'),
       ('cat_eq_crane', 'Crane / Hoist', 'Equipment', 'arrow_upward'),
       ('cat_eq_generator', 'Generator', 'Equipment', 'bolt'),
       ('cat_eq_tools', 'Small Tools', 'Equipment', 'construction'),
       ('cat_eq_scaffolding', 'Scaffolding', 'Equipment', 'stairs'),
-
-      // Transport
       ('cat_tr_truck', 'Truck / Dumper', 'Transport', 'local_shipping'),
       ('cat_tr_loader', 'Loader / Suzuki', 'Transport', 'local_shipping'),
       ('cat_tr_delivery', 'Delivery Charges', 'Transport', 'delivery_dining'),
       ('cat_tr_fuel', 'Fuel / Diesel', 'Transport', 'local_gas_station'),
       ('cat_tr_cartage', 'Site Cartage', 'Transport', 'forklift'),
-
-      // Other
       ('cat_oth_water', 'Site Water Supply', 'Other', 'water_drop'),
       ('cat_oth_electricity', 'Temporary Electricity', 'Other', 'bolt'),
       ('cat_oth_permits', 'Official Permits / NOC', 'Other', 'description'),
@@ -316,11 +426,124 @@ class DatabaseHelper {
       });
     }
     await batch.commit(noResult: true);
-    AppLogger.info('Seeded ${categories.length} standard categories', tag: 'DatabaseHelper');
+  }
+
+  /// Upgrades database from v1 to v2 (hierarchical construction expense taxonomy).
+  /// Preserves all expense records, IDs, financial totals, and custom categories.
+  static Future<void> upgradeToV2(Database db) async {
+    AppLogger.info('Starting v1 -> v2 database migration...', tag: 'DatabaseHelper');
+
+    // 1. Temporarily disable foreign keys and enable legacy_alter_table
+    // so that ALTER TABLE RENAME does NOT rewrite references in the expenses table.
+    await db.execute('PRAGMA foreign_keys = OFF;');
+    await db.execute('PRAGMA legacy_alter_table = ON;');
+
+    await db.transaction((txn) async {
+      // 2. Rename existing expense_categories to legacy_expense_categories
+      await txn.execute('ALTER TABLE expense_categories RENAME TO legacy_expense_categories;');
+
+      // 3. Create target v2 expense_categories table
+      await txn.execute('''
+        CREATE TABLE expense_categories (
+          id TEXT PRIMARY KEY NOT NULL,
+          parent_id TEXT REFERENCES expense_categories(id) ON DELETE RESTRICT,
+          name TEXT NOT NULL,
+          code TEXT NOT NULL,
+          phase TEXT NOT NULL,
+          icon_name TEXT,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          is_system INTEGER NOT NULL DEFAULT 1,
+          aliases TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          CONSTRAINT uq_category_code UNIQUE (code)
+        );
+      ''');
+
+      // 4. Performance indexes
+      await txn.execute('CREATE INDEX idx_expense_categories_parent ON expense_categories(parent_id);');
+      await txn.execute('CREATE INDEX idx_expense_categories_phase ON expense_categories(phase);');
+      await txn.execute('CREATE INDEX idx_expense_categories_active ON expense_categories(is_active);');
+
+      // 5. Seed the canonical taxonomy
+      await seedCategories(txn);
+
+      // 6. Migrate custom categories from legacy_expense_categories (where is_custom = 1)
+      final legacyCustom = await txn.query(
+        'legacy_expense_categories',
+        where: 'is_custom = 1',
+      );
+      final now = DateTime.now().toIso8601String();
+      for (final cat in legacyCustom) {
+        final id = cat['id'] as String;
+        final name = cat['name'] as String;
+        final iconName = cat['icon_name'] as String?;
+        final createdAt = (cat['created_at'] as String?) ?? now;
+        final groupName = (cat['group_name'] as String?) ?? 'Other';
+
+        String phaseCode = 'professional_site';
+        if (groupName.toLowerCase().contains('material') ||
+            groupName.toLowerCase().contains('labour') ||
+            groupName.toLowerCase().contains('structure')) {
+          phaseCode = 'grey_structure';
+        } else if (groupName.toLowerCase().contains('finish')) {
+          phaseCode = 'finishing';
+        } else if (groupName.toLowerCase().contains('external')) {
+          phaseCode = 'external_works';
+        }
+
+        final cleanCode = 'CUSTOM_${id.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_').toUpperCase()}';
+
+        await txn.insert('expense_categories', {
+          'id': id,
+          'parent_id': null,
+          'name': name,
+          'code': cleanCode,
+          'phase': phaseCode,
+          'icon_name': iconName,
+          'sort_order': 999,
+          'is_active': 1,
+          'is_system': 0,
+          'aliases': '[]',
+          'created_at': createdAt,
+          'updated_at': now,
+        });
+      }
+
+      // 7. Remap any expenses pointing to legacy IDs that changed
+      for (final entry in kLegacyCategoryMapping.entries) {
+        if (entry.key != entry.value) {
+          await txn.update(
+            'expenses',
+            {'category_id': entry.value},
+            where: 'category_id = ?',
+            whereArgs: [entry.key],
+          );
+        }
+      }
+
+      // 8. Foreign key validation check
+      final fkViolations = await txn.rawQuery('PRAGMA foreign_key_check;');
+      if (fkViolations.isNotEmpty) {
+        throw StateError('Foreign key check failed during v2 migration: $fkViolations');
+      }
+
+      // 9. Drop temporary legacy table
+      await txn.execute('DROP TABLE legacy_expense_categories;');
+    });
+
+    // 10. Re-enable foreign keys and reset legacy_alter_table
+    await db.execute('PRAGMA legacy_alter_table = OFF;');
+    await db.execute('PRAGMA foreign_keys = ON;');
+    AppLogger.info('Successfully migrated database to v2', tag: 'DatabaseHelper');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     AppLogger.info('Upgrading database from $oldVersion to $newVersion', tag: 'DatabaseHelper');
+    if (oldVersion < 2) {
+      await upgradeToV2(db);
+    }
   }
 
   /// Closes database connection safely.

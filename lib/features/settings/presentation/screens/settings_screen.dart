@@ -198,6 +198,20 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: Text(labourSubtitle),
                 onTap: () => context.push('/labour'),
               ),
+              ShadSectionItem(
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: tokens.muted,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(child: Icon(Icons.category_outlined, color: tokens.primary, size: 20)),
+                ),
+                title: const Text('Expense Taxonomies & Categories'),
+                subtitle: const Text('23 construction cost phases, subcategories & custom items'),
+                onTap: () => context.push('/categories'),
+              ),
             ],
           ),
           const SizedBox(height: 18),

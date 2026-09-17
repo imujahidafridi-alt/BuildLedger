@@ -165,11 +165,14 @@ class PdfReportGenerator {
           ),
           pw.SizedBox(height: 12),
           pw.TableHelper.fromTextArray(
-            headers: ['Date', 'Category', 'Description / Vendor', 'Payment', 'Amount (PKR)', 'Status'],
+            headers: ['Date', 'Category Hierarchy', 'Description / Vendor', 'Payment', 'Amount (PKR)', 'Status'],
             data: expenses.map((e) {
+              final catDisplay = e.categoryGroupName != null && e.categoryGroupName != e.categoryName
+                  ? '${e.categoryGroupName} · ${e.categoryName}'
+                  : (e.categoryName ?? '-');
               return [
                 DateFormatter.format(e.expenseDate),
-                e.categoryName ?? '-',
+                catDisplay,
                 e.description ?? e.supplierName ?? '-',
                 e.paymentMethod.displayName,
                 MoneyFormatter.format(e.amount),

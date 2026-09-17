@@ -172,6 +172,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   Future<Result<List<Expense>>> getExpenses({
     String? projectId,
     String? categoryId,
+    CostPhase? phase,
     String? supplierId,
     DateTime? startDate,
     DateTime? endDate,
@@ -191,8 +192,14 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
         args.add(projectId);
       }
       if (categoryId != null) {
-        conditions.add("e.category_id = ?");
+        // Matches exact category ID or any subcategory under this parent
+        conditions.add("(e.category_id = ? OR c.parent_id = ?)");
         args.add(categoryId);
+        args.add(categoryId);
+      }
+      if (phase != null) {
+        conditions.add("c.phase = ?");
+        args.add(phase.code);
       }
       if (supplierId != null) {
         conditions.add("e.supplier_id = ?");
@@ -218,11 +225,14 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
         SELECT 
           e.*,
           c.name as category_name,
-          c.group_name as group_name,
+          parent.name as parent_category_name,
+          c.phase as phase,
+          COALESCE(parent.name, c.name) as group_name,
           s.name as supplier_name,
           p.name as project_name
         FROM expenses e
         JOIN expense_categories c ON e.category_id = c.id
+        LEFT JOIN expense_categories parent ON c.parent_id = parent.id
         LEFT JOIN suppliers s ON e.supplier_id = s.id
         JOIN projects p ON e.project_id = p.id
         $whereClause
@@ -238,14 +248,415 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   }
 
   @override
-  Future<Result<List<ExpenseCategory>>> getCategories() async {
+  Future<Result<List<ExpenseCategory>>> getCategories({bool activeOnly = true}) async {
     try {
       final db = await _dbHelper.database;
-      final rows = await db.query('expense_categories', orderBy: 'group_name ASC, name ASC');
+      final rows = await db.query(
+        'expense_categories',
+        where: activeOnly ? 'is_active = 1' : null,
+        orderBy: 'sort_order ASC, name ASC',
+      );
       final list = rows.map(ExpenseCategoryModel.fromMap).toList();
       return Result.success(list);
     } catch (e) {
       return Result.failure(DatabaseFailure('Failed to fetch categories: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<ExpenseCategory>>> getCategoriesByPhase(CostPhase phase, {bool activeOnly = true}) async {
+    try {
+      final db = await _dbHelper.database;
+      final rows = await db.query(
+        'expense_categories',
+        where: activeOnly ? 'phase = ? AND is_active = 1' : 'phase = ?',
+        whereArgs: [phase.code],
+        orderBy: 'sort_order ASC, name ASC',
+      );
+      final list = rows.map(ExpenseCategoryModel.fromMap).toList();
+      return Result.success(list);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to fetch categories by phase: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<ExpenseCategory>>> getTopLevelCategories({CostPhase? phase, bool activeOnly = true}) async {
+    try {
+      final db = await _dbHelper.database;
+      final conditions = <String>['parent_id IS NULL'];
+      final args = <dynamic>[];
+
+      if (activeOnly) {
+        conditions.add('is_active = 1');
+      }
+      if (phase != null) {
+        conditions.add('phase = ?');
+        args.add(phase.code);
+      }
+
+      final rows = await db.query(
+        'expense_categories',
+        where: conditions.join(' AND '),
+        whereArgs: args.isNotEmpty ? args : null,
+        orderBy: 'sort_order ASC, name ASC',
+      );
+      final list = rows.map(ExpenseCategoryModel.fromMap).toList();
+      return Result.success(list);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to fetch top-level categories: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<ExpenseCategory>>> getSubcategories(String parentId, {bool activeOnly = true}) async {
+    try {
+      final db = await _dbHelper.database;
+      final rows = await db.query(
+        'expense_categories',
+        where: activeOnly ? 'parent_id = ? AND is_active = 1' : 'parent_id = ?',
+        whereArgs: [parentId],
+        orderBy: 'sort_order ASC, name ASC',
+      );
+      final list = rows.map(ExpenseCategoryModel.fromMap).toList();
+      return Result.success(list);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to fetch subcategories: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<ExpenseCategory>>> searchCategories(
+    String query, {
+    CostPhase? phase,
+    bool activeOnly = true,
+  }) async {
+    try {
+      final normalizedQuery = _normalize(query);
+      if (normalizedQuery.isEmpty) {
+        return getCategories(activeOnly: activeOnly);
+      }
+
+      final db = await _dbHelper.database;
+      final rows = await db.query(
+        'expense_categories',
+        where: activeOnly ? 'is_active = 1' : null,
+        orderBy: 'sort_order ASC, name ASC',
+      );
+      final allCategories = rows.map(ExpenseCategoryModel.fromMap).toList();
+
+      final categoryMap = {for (final c in allCategories) c.id: c};
+      final scoredCategories = <_CategoryMatch>[];
+
+      for (final cat in allCategories) {
+        if (phase != null && cat.phase != phase) continue;
+
+        final parentName = cat.parentId != null ? categoryMap[cat.parentId]?.name : null;
+        final normName = _normalize(cat.name);
+        final normParent = parentName != null ? _normalize(parentName) : '';
+        final normCode = _normalize(cat.code);
+
+        int score = 0;
+
+        // Exact match on name
+        if (normName == normalizedQuery) {
+          score = 100;
+        }
+        // Exact match on any alias
+        else if (cat.aliases.any((a) => _normalize(a) == normalizedQuery)) {
+          score = 95;
+        }
+        // Name starts with query
+        else if (normName.startsWith(normalizedQuery)) {
+          score = 85;
+        }
+        // Alias starts with query
+        else if (cat.aliases.any((a) => _normalize(a).startsWith(normalizedQuery))) {
+          score = 80;
+        }
+        // Name contains query
+        else if (normName.contains(normalizedQuery)) {
+          score = 70;
+        }
+        // Alias contains query
+        else if (cat.aliases.any((a) => _normalize(a).contains(normalizedQuery))) {
+          score = 65;
+        }
+        // Parent category contains query
+        else if (normParent.isNotEmpty && normParent.contains(normalizedQuery)) {
+          score = 50;
+        }
+        // Code contains query
+        else if (normCode.contains(normalizedQuery)) {
+          score = 40;
+        }
+
+        if (score > 0) {
+          scoredCategories.add(_CategoryMatch(cat, score));
+        }
+      }
+
+      scoredCategories.sort((a, b) {
+        if (b.score != a.score) return b.score.compareTo(a.score);
+        return a.category.sortOrder.compareTo(b.category.sortOrder);
+      });
+
+      return Result.success(scoredCategories.map((m) => m.category).toList());
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to search categories: $e'));
+    }
+  }
+
+  static String _normalize(String s) {
+    return s.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  @override
+  Future<Result<List<ExpenseCategory>>> getRecentCategories({String? projectId, int limit = 6}) async {
+    try {
+      final db = await _dbHelper.database;
+      final args = <dynamic>[];
+      var projectFilter = '';
+      if (projectId != null) {
+        projectFilter = 'AND e.project_id = ?';
+        args.add(projectId);
+      }
+      args.add(limit);
+
+      final sql = '''
+        SELECT c.*
+        FROM expense_categories c
+        JOIN (
+          SELECT e.category_id, MAX(e.expense_date) as last_used
+          FROM expenses e
+          WHERE e.status = 'active' $projectFilter
+          GROUP BY e.category_id
+          ORDER BY last_used DESC
+          LIMIT ?
+        ) r ON c.id = r.category_id
+        WHERE c.is_active = 1
+        ORDER BY r.last_used DESC
+      ''';
+
+      final rows = await db.rawQuery(sql, args);
+      final recent = rows.map(ExpenseCategoryModel.fromMap).toList();
+
+      if (recent.length < limit) {
+        final existingIds = recent.map((c) => c.id).toSet();
+        const fallbackIds = [
+          'cat_mat_cement',
+          'cat_mat_steel',
+          'cat_mat_bricks',
+          'cat_mat_sand',
+          'cat_lab_general',
+          'cat_mat_plumbing',
+        ];
+
+        for (final fbId in fallbackIds) {
+          if (recent.length >= limit) break;
+          if (!existingIds.contains(fbId)) {
+            final fbRows = await db.query(
+              'expense_categories',
+              where: 'id = ? AND is_active = 1',
+              whereArgs: [fbId],
+            );
+            if (fbRows.isNotEmpty) {
+              recent.add(ExpenseCategoryModel.fromMap(fbRows.first));
+              existingIds.add(fbId);
+            }
+          }
+        }
+      }
+
+      return Result.success(recent);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to fetch recent categories: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<ExpenseCategory>>> getFrequentCategories({String? projectId, int limit = 6}) async {
+    try {
+      final db = await _dbHelper.database;
+      final args = <dynamic>[];
+      var projectFilter = '';
+      if (projectId != null) {
+        projectFilter = 'AND e.project_id = ?';
+        args.add(projectId);
+      }
+      args.add(limit);
+
+      final sql = '''
+        SELECT c.*
+        FROM expense_categories c
+        JOIN (
+          SELECT e.category_id, COUNT(*) as usage_count
+          FROM expenses e
+          WHERE e.status = 'active' $projectFilter
+          GROUP BY e.category_id
+          ORDER BY usage_count DESC
+          LIMIT ?
+        ) f ON c.id = f.category_id
+        WHERE c.is_active = 1
+        ORDER BY f.usage_count DESC
+      ''';
+
+      final rows = await db.rawQuery(sql, args);
+      final frequent = rows.map(ExpenseCategoryModel.fromMap).toList();
+
+      if (frequent.length < limit) {
+        final existingIds = frequent.map((c) => c.id).toSet();
+        const fallbackIds = [
+          'cat_mat_cement',
+          'cat_mat_steel',
+          'cat_mat_bricks',
+          'cat_mat_sand',
+          'cat_lab_general',
+          'cat_mat_plumbing',
+        ];
+
+        for (final fbId in fallbackIds) {
+          if (frequent.length >= limit) break;
+          if (!existingIds.contains(fbId)) {
+            final fbRows = await db.query(
+              'expense_categories',
+              where: 'id = ? AND is_active = 1',
+              whereArgs: [fbId],
+            );
+            if (fbRows.isNotEmpty) {
+              frequent.add(ExpenseCategoryModel.fromMap(fbRows.first));
+              existingIds.add(fbId);
+            }
+          }
+        }
+      }
+
+      return Result.success(frequent);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to fetch frequent categories: $e'));
+    }
+  }
+
+  @override
+  Future<Result<ExpenseCategory>> createCustomCategory({
+    required String name,
+    required CostPhase phase,
+    String? parentId,
+    String? iconName,
+  }) async {
+    try {
+      final trimmedName = name.trim();
+      if (trimmedName.isEmpty) {
+        return const Result.failure(ValidationFailure('Category name cannot be empty.'));
+      }
+
+      final db = await _dbHelper.database;
+      // Check duplicate name under same parent
+      final dupRows = await db.query(
+        'expense_categories',
+        where: parentId != null ? 'LOWER(name) = ? AND parent_id = ?' : 'LOWER(name) = ? AND parent_id IS NULL',
+        whereArgs: parentId != null ? [trimmedName.toLowerCase(), parentId] : [trimmedName.toLowerCase()],
+      );
+      if (dupRows.isNotEmpty) {
+        return const Result.failure(ValidationFailure('A category with this name already exists here.'));
+      }
+
+      final id = const Uuid().v4();
+      final sanitized = trimmedName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toUpperCase();
+      final code = 'CUSTOM_${sanitized}_${DateTime.now().millisecondsSinceEpoch % 10000}';
+      final now = DateTime.now();
+
+      final category = ExpenseCategory(
+        id: id,
+        parentId: parentId,
+        name: trimmedName,
+        code: code,
+        phase: phase,
+        iconName: iconName ?? 'folder',
+        sortOrder: 999,
+        isActive: true,
+        isSystem: false,
+        aliases: const [],
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await db.insert('expense_categories', ExpenseCategoryModel.toMap(category));
+      return Result.success(category);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to create custom category: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> toggleCategoryActive({
+    required String categoryId,
+    required bool isActive,
+  }) async {
+    try {
+      final db = await _dbHelper.database;
+      final now = DateTime.now().toIso8601String();
+      await db.transaction((txn) async {
+        await txn.update(
+          'expense_categories',
+          {'is_active': isActive ? 1 : 0, 'updated_at': now},
+          where: 'id = ?',
+          whereArgs: [categoryId],
+        );
+
+        // If deactivating a parent category, also deactivate its subcategories
+        if (!isActive) {
+          await txn.update(
+            'expense_categories',
+            {'is_active': 0, 'updated_at': now},
+            where: 'parent_id = ?',
+            whereArgs: [categoryId],
+          );
+        }
+      });
+      return const Result.success(null);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to toggle category active status: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> updateCustomCategory({
+    required String categoryId,
+    required String name,
+    String? iconName,
+  }) async {
+    try {
+      final trimmedName = name.trim();
+      if (trimmedName.isEmpty) {
+        return const Result.failure(ValidationFailure('Category name cannot be empty.'));
+      }
+
+      final db = await _dbHelper.database;
+      final checkRows = await db.query(
+        'expense_categories',
+        where: 'id = ?',
+        whereArgs: [categoryId],
+      );
+      if (checkRows.isEmpty) {
+        return const Result.failure(NotFoundFailure('Category not found.'));
+      }
+      if (checkRows.first['is_system'] == 1) {
+        return const Result.failure(ValidationFailure('System categories cannot be renamed.'));
+      }
+
+      final updates = <String, dynamic>{
+        'name': trimmedName,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (iconName != null) {
+        updates['icon_name'] = iconName;
+      }
+
+      await db.update('expense_categories', updates, where: 'id = ?', whereArgs: [categoryId]);
+      return const Result.success(null);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to update category: $e'));
     }
   }
 
@@ -257,11 +668,14 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
         SELECT 
           e.*,
           c.name as category_name,
-          c.group_name as group_name,
+          parent.name as parent_category_name,
+          c.phase as phase,
+          COALESCE(parent.name, c.name) as group_name,
           s.name as supplier_name,
           p.name as project_name
         FROM expenses e
         JOIN expense_categories c ON e.category_id = c.id
+        LEFT JOIN expense_categories parent ON c.parent_id = parent.id
         LEFT JOIN suppliers s ON e.supplier_id = s.id
         JOIN projects p ON e.project_id = p.id
         WHERE e.id = ?
@@ -274,4 +688,10 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       return Result.failure(DatabaseFailure('Failed to fetch expense: $e'));
     }
   }
+}
+
+class _CategoryMatch {
+  final ExpenseCategory category;
+  final int score;
+  _CategoryMatch(this.category, this.score);
 }

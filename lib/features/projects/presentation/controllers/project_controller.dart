@@ -21,8 +21,28 @@ final projectsListProvider = FutureProvider<List<Project>>((ref) async {
 final selectedProjectProvider = StateProvider<Project?>((ref) {
   final projectsAsync = ref.watch(projectsListProvider);
   return projectsAsync.maybeWhen(
-    data: (projects) => projects.isNotEmpty ? projects.first : null,
-    orElse: () => null,
+    data: (projects) {
+      if (projects.isEmpty) return null;
+      // Reconcile with existing selection if possible
+      Project? previous;
+      try {
+        previous = ref.controller.state;
+      } catch (_) {
+        previous = null;
+      }
+      final prev = previous;
+      if (prev != null && projects.any((p) => p.id == prev.id)) {
+        return projects.firstWhere((p) => p.id == prev.id);
+      }
+      return projects.first;
+    },
+    orElse: () {
+      try {
+        return ref.controller.state;
+      } catch (_) {
+        return null;
+      }
+    },
   );
 });
 

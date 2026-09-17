@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:build_ledger/features/expenses/domain/entities/expense_category.dart';
 import 'package:build_ledger/features/expenses/presentation/controllers/expense_controller.dart';
 import 'package:build_ledger/features/expenses/presentation/widgets/app_expense_tile.dart';
 import 'package:build_ledger/features/projects/presentation/controllers/project_controller.dart';
@@ -17,15 +18,14 @@ class ExpenseListScreen extends ConsumerStatefulWidget {
 
 class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
   final _searchController = TextEditingController();
-  String _selectedGroup = 'All';
+  CostPhase? _selectedPhase;
 
-  final List<String> _categoryGroups = [
-    'All',
-    'Materials',
-    'Labour',
-    'Equipment',
-    'Transport',
-    'Other',
+  final List<({String label, CostPhase? phase})> _phaseFilters = const [
+    (label: 'All', phase: null),
+    (label: 'Grey Structure', phase: CostPhase.greyStructure),
+    (label: 'Finishing', phase: CostPhase.finishing),
+    (label: 'External Works', phase: CostPhase.externalWorks),
+    (label: 'Professional & Site', phase: CostPhase.professionalSite),
   ];
 
   @override
@@ -129,19 +129,23 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
             ),
           ),
 
-          // Horizontal Category Filter Tabs
+          // Horizontal Phase Filter Tabs
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: ShadTabs<String>(
-              values: _categoryGroups,
-              selectedValue: _selectedGroup,
+            child: ShadTabs<({String label, CostPhase? phase})>(
+              values: _phaseFilters,
+              selectedValue: _phaseFilters.firstWhere(
+                (f) => f.phase == _selectedPhase,
+                orElse: () => _phaseFilters.first,
+              ),
               scrollable: true,
-              labelBuilder: (group) => group,
-              onTabSelected: (group) {
-                setState(() => _selectedGroup = group);
+              labelBuilder: (item) => item.label,
+              onTabSelected: (item) {
+                setState(() => _selectedPhase = item.phase);
                 ref.read(expenseFilterProvider.notifier).update((f) {
                   return f.copyWith(
-                    clearCategory: group == 'All',
+                    phase: item.phase,
+                    clearPhase: item.phase == null,
                   );
                 });
               },

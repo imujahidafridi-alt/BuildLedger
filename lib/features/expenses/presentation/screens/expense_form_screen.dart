@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'package:build_ledger/core/domain/money.dart';
 import 'package:build_ledger/features/expenses/domain/entities/expense.dart';
+import 'package:build_ledger/features/expenses/domain/entities/expense_category.dart';
 import 'package:build_ledger/features/expenses/presentation/controllers/expense_controller.dart';
 import 'package:build_ledger/features/expenses/presentation/widgets/receipt_picker_widget.dart';
 import 'package:build_ledger/features/projects/presentation/controllers/project_controller.dart';
 import 'package:build_ledger/features/suppliers/presentation/controllers/supplier_controller.dart';
+import 'package:build_ledger/core/logging/app_logger.dart';
+import 'package:build_ledger/shared/ui/forms/shad_category_selector.dart';
 import 'package:build_ledger/shared/ui/shad_ui.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
@@ -29,6 +32,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
   String? _selectedProjectId;
   String? _selectedCategoryId;
+  ExpenseCategory? _selectedCategory;
+  String? _categoryError;
   String? _selectedSupplierId;
   PaymentMethod _paymentMethod = PaymentMethod.cash;
   DateTime _expenseDate = DateTime.now();
@@ -55,16 +60,33 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_isSaving) return;
+
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please complete all required fields correctly.'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
     if (_selectedProjectId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a project')),
+        SnackBar(
+          content: const Text('Please select a project'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
       return;
     }
     if (_selectedCategoryId == null) {
+      setState(() => _categoryError = 'Please select an expense category');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an expense category')),
+        SnackBar(
+          content: const Text('Please select an expense category'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
       return;
     }
@@ -98,7 +120,32 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Expense saved successfully')),
         );
-        context.pop();
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          try {
+            context.pop();
+          } catch (_) {}
+        }
+      } else if (mounted) {
+        final error = ref.read(expenseControllerProvider).error;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error?.toString() ?? 'Unable to save expense. Please try again.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e, st) {
+      AppLogger.error('Unexpected exception during expense submission',
+          tag: 'ExpenseFormScreen', error: e, stackTrace: st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('An unexpected error occurred: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -107,10 +154,28 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activeProject = ref.watch(selectedProjectProvider);
     final projects = ref.watch(projectsListProvider).value ?? [];
     final categories = ref.watch(expenseCategoriesProvider).value ?? [];
+    final recentCategories = ref.watch(recentCategoriesProvider).value ?? [];
     final suppliers = ref.watch(suppliersListProvider).value ?? [];
     final dynamicBottomPadding = MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 16;
+
+    // Auto-select active project or fallback to first project if no selection has been made yet
+    if (_selectedProjectId == null) {
+      if (activeProject != null) {
+        _selectedProjectId = activeProject.id;
+      } else if (projects.isNotEmpty) {
+        _selectedProjectId = projects.first.id;
+      }
+    }
+
+    if (_selectedCategory == null && _selectedCategoryId != null && categories.isNotEmpty) {
+      _selectedCategory = categories.cast<ExpenseCategory?>().firstWhere(
+            (c) => c?.id == _selectedCategoryId,
+            orElse: () => null,
+          );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -148,17 +213,21 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Category Selector
-              ShadSelect<String>(
+              // Hierarchical Construction Category Selector
+              ShadCategorySelector(
                 label: 'Expense Category *',
                 placeholder: 'Select an expense category',
-                value: _selectedCategoryId,
-                enableSearch: true,
-                items: categories
-                    .map((c) => ShadSelectItem(value: c.id, label: c.name, subtitle: c.groupName))
-                    .toList(),
-                onChanged: (val) => setState(() => _selectedCategoryId = val),
-                validator: (v) => v == null ? 'Category is required' : null,
+                value: _selectedCategory,
+                categories: categories,
+                recentCategories: recentCategories,
+                errorText: _categoryError,
+                onChanged: (cat) {
+                  setState(() {
+                    _selectedCategory = cat;
+                    _selectedCategoryId = cat?.id;
+                    _categoryError = null;
+                  });
+                },
               ),
               const SizedBox(height: 16),
 
