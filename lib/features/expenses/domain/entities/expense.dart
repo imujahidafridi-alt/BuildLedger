@@ -106,6 +106,7 @@ class Expense {
   bool get hasReceipt => receiptPath != null && receiptPath!.isNotEmpty;
 
   Expense copyWith({
+    String? projectId,
     String? categoryId,
     String? supplierId,
     Money? amount,
@@ -126,7 +127,7 @@ class Expense {
   }) {
     return Expense(
       id: id,
-      projectId: projectId,
+      projectId: projectId ?? this.projectId,
       categoryId: categoryId ?? this.categoryId,
       supplierId: supplierId ?? this.supplierId,
       amount: amount ?? this.amount,

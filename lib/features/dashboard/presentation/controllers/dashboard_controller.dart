@@ -26,3 +26,9 @@ final projectSummaryProvider = FutureProvider<ProjectFinancialSummary>((ref) asy
   final dao = ref.watch(dashboardQueryDaoProvider);
   return await dao.getProjectFinancialSummary(activeProject.id);
 });
+
+/// Fetches financial summary for any specific project ID (active or archived).
+final projectFinancialSummaryProvider = FutureProvider.family<ProjectFinancialSummary, String>((ref, projectId) async {
+  final dao = ref.watch(dashboardQueryDaoProvider);
+  return await dao.getProjectFinancialSummary(projectId);
+});

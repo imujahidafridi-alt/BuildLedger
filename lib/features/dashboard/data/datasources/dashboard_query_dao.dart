@@ -132,4 +132,28 @@ class DashboardQueryDao {
       recentExpenses: recentExpenses,
     );
   }
+
+  /// Returns the complete category breakdown without limits for a project.
+  Future<Map<String, Money>> getFullCategoryBreakdown(String projectId) async {
+    final db = await _dbHelper.database;
+    final categoryRows = await db.rawQuery('''
+      SELECT 
+        COALESCE(parent.name, c.name) as top_category_name,
+        COALESCE(SUM(e.amount_minor), 0) as category_total
+      FROM expenses e
+      JOIN expense_categories c ON e.category_id = c.id
+      LEFT JOIN expense_categories parent ON c.parent_id = parent.id
+      WHERE e.status = 'active' AND e.project_id = ?
+      GROUP BY top_category_name
+      ORDER BY category_total DESC
+    ''', [projectId]);
+
+    final breakdown = <String, Money>{};
+    for (final row in categoryRows) {
+      final group = row['top_category_name'] as String;
+      final total = Money.fromMinor(row['category_total'] as int);
+      breakdown[group] = total;
+    }
+    return breakdown;
+  }
 }

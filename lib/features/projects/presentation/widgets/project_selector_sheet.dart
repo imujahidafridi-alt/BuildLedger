@@ -15,9 +15,22 @@ class ProjectSelectorSheet extends StatefulWidget {
     this.currentSelected,
   });
 
-  static Future<Project?> show(BuildContext context, WidgetRef ref) async {
-    final projects = ref.read(projectsListProvider).value ?? [];
+  static Future<Project?> show(
+    BuildContext context,
+    WidgetRef ref, {
+    bool includeArchived = false,
+  }) async {
+    final List<Project> projects;
+    if (includeArchived) {
+      final repo = ref.read(projectRepositoryProvider);
+      final result = await repo.getProjects(includeArchived: true);
+      projects = result.fold(onSuccess: (p) => p, onFailure: (_) => []);
+    } else {
+      projects = ref.read(projectsListProvider).value ?? [];
+    }
     final current = ref.read(selectedProjectProvider);
+
+    if (!context.mounted) return null;
 
     return await ShadSheet.show<Project>(
       context: context,
@@ -55,7 +68,7 @@ class _ProjectSelectorSheetState extends State<ProjectSelectorSheet> {
     }).toList();
 
     return ShadSheet(
-      title: const Text('Select Active Project'),
+      title: Text(widget.projects.any((p) => p.isArchived) ? 'Select Project' : 'Select Active Project'),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,12 +126,26 @@ class _ProjectSelectorSheetState extends State<ProjectSelectorSheet> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        project.name,
-                                        style: tokens.typography.p.copyWith(
-                                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                                          color: tokens.foreground,
-                                        ),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              project.name,
+                                              style: tokens.typography.p.copyWith(
+                                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                                color: tokens.foreground,
+                                              ),
+                                            ),
+                                          ),
+                                          if (project.isArchived) ...[
+                                            const SizedBox(width: 6),
+                                            const ShadBadge(
+                                              label: 'ARCHIVED',
+                                              variant: ShadBadgeVariant.neutral,
+                                              isSmall: true,
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                       if (project.location != null) ...[
                                         const SizedBox(height: 2),

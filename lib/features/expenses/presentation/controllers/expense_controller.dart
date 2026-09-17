@@ -150,6 +150,42 @@ class ExpenseController extends StateNotifier<AsyncValue<void>> {
     );
   }
 
+  Future<bool> updateExpense(Expense expense, {String? stagedReceiptPath}) async {
+    state = const AsyncValue.loading();
+    final result = await _repository.updateExpense(expense, stagedReceiptPath: stagedReceiptPath);
+    return result.fold(
+      onSuccess: (_) {
+        state = const AsyncValue.data(null);
+        _ref.invalidate(filteredExpensesProvider);
+        _ref.invalidate(recentCategoriesProvider);
+        _ref.invalidate(suppliersListProvider);
+        return true;
+      },
+      onFailure: (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+    );
+  }
+
+  Future<bool> deleteExpense(String expenseId) async {
+    state = const AsyncValue.loading();
+    final result = await _repository.deleteExpense(expenseId);
+    return result.fold(
+      onSuccess: (_) {
+        state = const AsyncValue.data(null);
+        _ref.invalidate(filteredExpensesProvider);
+        _ref.invalidate(recentCategoriesProvider);
+        _ref.invalidate(suppliersListProvider);
+        return true;
+      },
+      onFailure: (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+    );
+  }
+
   Future<bool> voidExpense({required String expenseId, required String reason}) async {
     state = const AsyncValue.loading();
     final result = await _repository.voidExpense(
@@ -224,4 +260,13 @@ class ExpenseController extends StateNotifier<AsyncValue<void>> {
 
 final expenseControllerProvider = StateNotifierProvider<ExpenseController, AsyncValue<void>>((ref) {
   return ExpenseController(ref.watch(expenseRepositoryProvider), ref);
+});
+
+final expenseByIdProvider = FutureProvider.family<Expense?, String>((ref, id) async {
+  final repo = ref.watch(expenseRepositoryProvider);
+  final result = await repo.getExpenseById(id);
+  return result.fold(
+    onSuccess: (exp) => exp,
+    onFailure: (_) => null,
+  );
 });

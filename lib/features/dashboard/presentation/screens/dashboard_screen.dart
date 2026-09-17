@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:build_ledger/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:build_ledger/features/dashboard/presentation/widgets/budget_gauge_card.dart';
 import 'package:build_ledger/features/dashboard/presentation/widgets/category_spend_card.dart';
+import 'package:build_ledger/features/expenses/presentation/widgets/app_expense_tile.dart';
+import 'package:build_ledger/features/expenses/presentation/widgets/expense_detail_sheet.dart';
 import 'package:build_ledger/features/projects/presentation/controllers/project_controller.dart';
 import 'package:build_ledger/features/projects/presentation/widgets/project_selector_sheet.dart';
 import 'package:build_ledger/shared/ui/shad_ui.dart';
@@ -135,7 +137,11 @@ class DashboardScreen extends ConsumerWidget {
                     const SizedBox(height: 16),
 
                     // 3. Category Spending Breakdown
-                    CategorySpendCard(categoryBreakdown: summary.categoryBreakdown),
+                    CategorySpendCard(
+                      categoryBreakdown: summary.categoryBreakdown,
+                      projectName: summary.projectName,
+                      projectId: summary.projectId,
+                    ),
                     const SizedBox(height: 20),
 
                     // 4. Recent Activity Section Header
@@ -155,7 +161,7 @@ class DashboardScreen extends ConsumerWidget {
                           color: Colors.transparent,
                           child: InkWell(
                             borderRadius: ShadRadii.roundedMd,
-                            onTap: () => context.push('/expenses'),
+                            onTap: () => context.go('/expenses'),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                               child: Text(
@@ -192,14 +198,9 @@ class DashboardScreen extends ConsumerWidget {
                         separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final expense = summary.recentExpenses[index];
-                          return ShadTransactionTile(
-                            title: expense.categoryName ?? 'Construction Expense',
-                            subtitle: expense.supplierName ?? expense.description ?? 'General site purchase',
-                            date: expense.expenseDate,
-                            amount: expense.amount,
-                            isVoided: expense.isVoided,
-                            leadingIcon: const Icon(Icons.receipt_long),
-                            onTap: () => context.push('/expenses'),
+                          return AppExpenseTile(
+                            expense: expense,
+                            onTap: () => ExpenseDetailSheet.show(context, expense),
                           );
                         },
                       ),

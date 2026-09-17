@@ -151,6 +151,26 @@ class ProjectRepositoryImpl implements ProjectRepository {
   }
 
   @override
+  Future<Result<List<Project>>> getActiveProjects() => getProjects(includeArchived: false);
+
+  @override
+  Future<Result<List<Project>>> getArchivedProjects() async {
+    try {
+      final db = await _dbHelper.database;
+      final maps = await db.query(
+        'projects',
+        where: 'status = ?',
+        whereArgs: ['archived'],
+        orderBy: 'archived_at DESC, updated_at DESC',
+      );
+      final projects = maps.map(ProjectModel.fromMap).toList();
+      return Result.success(projects);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to fetch archived projects: $e'));
+    }
+  }
+
+  @override
   Future<Result<Project?>> getProjectById(String id) async {
     try {
       final db = await _dbHelper.database;

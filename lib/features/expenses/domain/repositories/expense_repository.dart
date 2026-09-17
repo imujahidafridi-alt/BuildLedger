@@ -4,6 +4,8 @@ import 'package:build_ledger/features/expenses/domain/entities/expense_category.
 
 abstract class ExpenseRepository {
   Future<Result<Expense>> recordExpense(Expense expense, {String? stagedReceiptPath});
+  Future<Result<Expense>> updateExpense(Expense expense, {String? stagedReceiptPath});
+  Future<Result<void>> deleteExpense(String expenseId);
   Future<Result<void>> voidExpense({
     required String expenseId,
     required String reason,

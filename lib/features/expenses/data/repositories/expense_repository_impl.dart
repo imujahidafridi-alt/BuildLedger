@@ -95,6 +95,146 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   }
 
   @override
+  Future<Result<Expense>> updateExpense(Expense expense, {String? stagedReceiptPath}) async {
+    try {
+      final now = DateTime.now();
+
+      await _transactionRunner.run((txn) async {
+        // 1. Fetch existing expense to compare changes
+        final rows = await txn.query(
+          'expenses',
+          where: 'id = ?',
+          whereArgs: [expense.id],
+          limit: 1,
+        );
+        if (rows.isEmpty) throw Exception('Expense record not found');
+        final oldExpense = ExpenseModel.fromMap(rows.first);
+
+        // 2. Reconcile supplier ledger if credit status or supplier or amount changed
+        if (oldExpense.isCredit && oldExpense.supplierId != null) {
+          await txn.delete(
+            'supplier_ledger',
+            where: 'reference_id = ? AND entry_type = ?',
+            whereArgs: [expense.id, LedgerEntryType.purchase.toDbString()],
+          );
+        }
+
+        if (expense.isCredit && expense.supplierId != null && expense.isActive) {
+          final ledgerEntry = SupplierLedgerEntry(
+            id: const Uuid().v4(),
+            supplierId: expense.supplierId!,
+            projectId: expense.projectId,
+            direction: LedgerDirection.credit,
+            entryType: LedgerEntryType.purchase,
+            amount: expense.amount,
+            referenceId: expense.id,
+            description: expense.description ?? 'Material Purchase on Credit',
+            entryDate: expense.expenseDate,
+            createdAt: now,
+          );
+          await txn.insert('supplier_ledger', SupplierLedgerModel.toMap(ledgerEntry));
+        }
+
+        // 3. Update expenses table
+        final updatedExpense = expense.copyWith(updatedAt: now);
+        await txn.update(
+          'expenses',
+          ExpenseModel.toMap(updatedExpense),
+          where: 'id = ?',
+          whereArgs: [expense.id],
+        );
+
+        // 4. Insert audit log
+        await txn.insert('audit_logs', {
+          'id': const Uuid().v4(),
+          'entity_type': 'expense',
+          'entity_id': expense.id,
+          'action': 'update',
+          'actor': 'local_user',
+          'payload_before': 'amount: ${oldExpense.amount.minorUnits}, cat: ${oldExpense.categoryId}',
+          'payload_after': 'amount: ${expense.amount.minorUnits}, cat: ${expense.categoryId}',
+          'timestamp': now.toIso8601String(),
+        });
+      });
+
+      // Two-phase promotion if new receipt provided
+      var finalExpense = expense;
+      if (stagedReceiptPath != null) {
+        final permanentPath = await _receiptService.promoteReceipt(
+          stagedPath: stagedReceiptPath,
+          projectId: expense.projectId,
+          expenseId: expense.id,
+        );
+
+        final db = await _dbHelper.database;
+        await db.update(
+          'expenses',
+          {'receipt_path': permanentPath},
+          where: 'id = ?',
+          whereArgs: [expense.id],
+        );
+        finalExpense = expense.copyWith(receiptPath: permanentPath);
+      }
+
+      return Result.success(finalExpense);
+    } catch (e) {
+      if (stagedReceiptPath != null) {
+        await _receiptService.discardStagedReceipt(stagedReceiptPath);
+      }
+      return Result.failure(DatabaseFailure('Failed to update expense: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> deleteExpense(String expenseId) async {
+    try {
+      final now = DateTime.now();
+
+      await _transactionRunner.run((txn) async {
+        // 1. Fetch existing expense
+        final rows = await txn.query(
+          'expenses',
+          where: 'id = ?',
+          whereArgs: [expenseId],
+          limit: 1,
+        );
+        if (rows.isEmpty) throw Exception('Expense record not found');
+        final expense = ExpenseModel.fromMap(rows.first);
+
+        // 2. Clean up any supplier ledger entries referencing this expense
+        await txn.delete(
+          'supplier_ledger',
+          where: 'reference_id = ?',
+          whereArgs: [expenseId],
+        );
+
+        // 3. Delete expense record
+        await txn.delete(
+          'expenses',
+          where: 'id = ?',
+          whereArgs: [expenseId],
+        );
+
+        // 4. Audit log
+        await txn.insert('audit_logs', {
+          'id': const Uuid().v4(),
+          'entity_type': 'expense',
+          'entity_id': expenseId,
+          'action': 'delete',
+          'actor': 'local_user',
+          'payload_before': 'amount: ${expense.amount.minorUnits}, desc: ${expense.description}',
+          'payload_after': null,
+          'timestamp': now.toIso8601String(),
+        });
+      });
+
+      return const Result.success(null);
+    } catch (e) {
+      return Result.failure(DatabaseFailure('Failed to delete expense: $e'));
+    }
+  }
+
+  @override
   Future<Result<void>> voidExpense({
     required String expenseId,
     required String reason,

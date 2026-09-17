@@ -46,19 +46,30 @@ class ProjectCard extends StatelessWidget {
                 if (project.clientName != null) ...[
                   Icon(Icons.person_outline, size: 14, color: tokens.mutedForeground),
                   const SizedBox(width: 4),
-                  Text(
-                    project.clientName!,
-                    style: tokens.typography.muted,
+                  Flexible(
+                    child: Text(
+                      project.clientName!,
+                      style: tokens.typography.muted,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
                 if (project.clientName != null && project.location != null)
-                  Text(' • ', style: TextStyle(color: tokens.mutedForeground)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text('•', style: TextStyle(color: tokens.mutedForeground)),
+                  ),
                 if (project.location != null) ...[
                   Icon(Icons.location_on_outlined, size: 14, color: tokens.mutedForeground),
                   const SizedBox(width: 4),
-                  Text(
-                    project.location!,
-                    style: tokens.typography.muted,
+                  Flexible(
+                    child: Text(
+                      project.location!,
+                      style: tokens.typography.muted,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ],

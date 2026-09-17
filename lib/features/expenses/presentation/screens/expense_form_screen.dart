@@ -14,7 +14,12 @@ import 'package:build_ledger/shared/ui/forms/shad_category_selector.dart';
 import 'package:build_ledger/shared/ui/shad_ui.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
-  const ExpenseFormScreen({super.key});
+  final Expense? initialExpense;
+
+  const ExpenseFormScreen({
+    super.key,
+    this.initialExpense,
+  });
 
   @override
   ConsumerState<ExpenseFormScreen> createState() => _ExpenseFormScreenState();
@@ -40,11 +45,26 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   String? _stagedReceiptPath;
   bool _isSaving = false;
 
+  bool get isEditing => widget.initialExpense != null;
+
   @override
   void initState() {
     super.initState();
-    // Default to active project
-    _selectedProjectId = ref.read(selectedProjectProvider)?.id;
+    if (widget.initialExpense != null) {
+      final exp = widget.initialExpense!;
+      _selectedProjectId = exp.projectId;
+      _selectedCategoryId = exp.categoryId;
+      _selectedSupplierId = exp.supplierId;
+      _paymentMethod = exp.paymentMethod;
+      _expenseDate = exp.expenseDate;
+      _amountController.text = (exp.amount.minorUnits / 100).toStringAsFixed(exp.amount.minorUnits % 100 == 0 ? 0 : 2);
+      _descController.text = exp.description ?? '';
+      _notesController.text = exp.notes ?? '';
+      _stagedReceiptPath = exp.receiptPath;
+    } else {
+      // Default to active project
+      _selectedProjectId = ref.read(selectedProjectProvider)?.id;
+    }
   }
 
   @override
@@ -97,44 +117,86 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       final now = DateTime.now();
       final amount = Money.parse(_amountController.text);
 
-      final expense = Expense(
-        id: const Uuid().v4(),
-        projectId: _selectedProjectId!,
-        categoryId: _selectedCategoryId!,
-        supplierId: _selectedSupplierId,
-        amount: amount,
-        paymentMethod: _paymentMethod,
-        expenseDate: _expenseDate,
-        description: _descController.text.trim().isNotEmpty ? _descController.text.trim() : null,
-        notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
-        createdAt: now,
-        updatedAt: now,
-      );
+      if (isEditing) {
+        final updatedExpense = widget.initialExpense!.copyWith(
+          projectId: _selectedProjectId!,
+          categoryId: _selectedCategoryId!,
+          supplierId: _selectedSupplierId,
+          amount: amount,
+          paymentMethod: _paymentMethod,
+          expenseDate: _expenseDate,
+          description: _descController.text.trim().isNotEmpty ? _descController.text.trim() : null,
+          notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+          receiptPath: _stagedReceiptPath,
+        );
 
-      final success = await ref.read(expenseControllerProvider.notifier).recordExpense(
-            expense,
-            stagedReceiptPath: _stagedReceiptPath,
+        final newReceiptPath = _stagedReceiptPath != widget.initialExpense!.receiptPath ? _stagedReceiptPath : null;
+
+        final success = await ref.read(expenseControllerProvider.notifier).updateExpense(
+              updatedExpense,
+              stagedReceiptPath: newReceiptPath,
+            );
+
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Expense updated successfully')),
           );
-
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Expense saved successfully')),
-        );
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        } else {
-          try {
-            context.pop();
-          } catch (_) {}
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop(updatedExpense);
+          } else {
+            try {
+              context.pop(updatedExpense);
+            } catch (_) {}
+          }
+        } else if (mounted) {
+          final error = ref.read(expenseControllerProvider).error;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error?.toString() ?? 'Unable to update expense. Please try again.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
         }
-      } else if (mounted) {
-        final error = ref.read(expenseControllerProvider).error;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error?.toString() ?? 'Unable to save expense. Please try again.'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
+      } else {
+        final expense = Expense(
+          id: const Uuid().v4(),
+          projectId: _selectedProjectId!,
+          categoryId: _selectedCategoryId!,
+          supplierId: _selectedSupplierId,
+          amount: amount,
+          paymentMethod: _paymentMethod,
+          expenseDate: _expenseDate,
+          description: _descController.text.trim().isNotEmpty ? _descController.text.trim() : null,
+          notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+          createdAt: now,
+          updatedAt: now,
         );
+
+        final success = await ref.read(expenseControllerProvider.notifier).recordExpense(
+              expense,
+              stagedReceiptPath: _stagedReceiptPath,
+            );
+
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Expense saved successfully')),
+          );
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          } else {
+            try {
+              context.pop();
+            } catch (_) {}
+          }
+        } else if (mounted) {
+          final error = ref.read(expenseControllerProvider).error;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error?.toString() ?? 'Unable to save expense. Please try again.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
       }
     } catch (e, st) {
       AppLogger.error('Unexpected exception during expense submission',
@@ -179,7 +241,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Record Expense'),
+        title: Text(isEditing ? 'Edit Expense' : 'Record Expense'),
       ),
       body: KeyboardDismissible(
         child: Form(
@@ -288,6 +350,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
               // Receipt Attachment Pipeline
               ReceiptPickerWidget(
+                initialPath: _stagedReceiptPath,
                 onReceiptChanged: (path) => setState(() => _stagedReceiptPath = path),
               ),
               const SizedBox(height: 16),
@@ -307,7 +370,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
               // Submit Button
               ShadButton(
-                label: 'Save Expense',
+                label: isEditing ? 'Update Expense' : 'Save Expense',
                 isLoading: _isSaving,
                 variant: ShadButtonVariant.primary,
                 size: ShadButtonSize.lg,

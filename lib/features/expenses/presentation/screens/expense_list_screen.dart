@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:build_ledger/features/expenses/domain/entities/expense_category.dart';
 import 'package:build_ledger/features/expenses/presentation/controllers/expense_controller.dart';
 import 'package:build_ledger/features/expenses/presentation/widgets/app_expense_tile.dart';
+import 'package:build_ledger/features/expenses/presentation/widgets/expense_detail_sheet.dart';
 import 'package:build_ledger/features/projects/presentation/controllers/project_controller.dart';
 import 'package:build_ledger/features/projects/presentation/widgets/project_selector_sheet.dart';
 import 'package:build_ledger/shared/dialogs/app_void_dialog.dart';
@@ -184,6 +185,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                       final expense = expenses[index];
                       return AppExpenseTile(
                         expense: expense,
+                        onTap: () => ExpenseDetailSheet.show(context, expense),
                         onVoid: expense.isActive ? () => _onVoidExpense(expense.id) : null,
                       );
                     },

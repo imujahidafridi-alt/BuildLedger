@@ -23,6 +23,14 @@ class ProjectListScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text('Projects', style: tokens.typography.h3),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.archive_outlined),
+            tooltip: 'Archived Projects',
+            onPressed: () => context.push('/projects/archived'),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: projectsAsync.when(
         loading: () => const ShadLoadingState(message: 'Loading construction projects...'),
@@ -35,9 +43,24 @@ class ProjectListScreen extends ConsumerWidget {
             return ShadEmptyState(
               icon: Icons.apartment,
               title: 'No Active Projects',
-              message: 'Start by creating your first construction project to track budgets and expenses.',
-              actionLabel: 'Create Project',
-              onAction: () => context.push('/projects/new'),
+              message: 'You currently have no active projects. Create a new project or view previously archived projects.',
+              customAction: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ShadButton(
+                    label: 'Create Project',
+                    onPressed: () => context.push('/projects/new'),
+                    size: ShadButtonSize.medium,
+                  ),
+                  const SizedBox(height: 12),
+                  ShadButton.outline(
+                    label: 'View Archived Projects',
+                    icon: Icons.archive_outlined,
+                    onPressed: () => context.push('/projects/archived'),
+                    size: ShadButtonSize.medium,
+                  ),
+                ],
+              ),
             );
           }
 
@@ -46,30 +69,70 @@ class ProjectListScreen extends ConsumerWidget {
             onRefresh: () async => ref.invalidate(projectsListProvider),
             child: ListView.separated(
               padding: EdgeInsets.fromLTRB(16, 12, 16, dynamicBottomPadding),
-              itemCount: projects.length,
+              itemCount: projects.length + 1,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                final project = projects[index];
-                return ProjectCard(
-                  project: project,
-                  onTap: () {
-                    ref.read(selectedProjectProvider.notifier).state = project;
-                    context.push('/projects/${project.id}');
-                  },
+                if (index < projects.length) {
+                  final project = projects[index];
+                  return ProjectCard(
+                    project: project,
+                    onTap: () {
+                      ref.read(selectedProjectProvider.notifier).state = project;
+                      context.push('/projects/${project.id}');
+                    },
+                  );
+                }
+
+                // Footer link to Archived Projects
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 24),
+                  child: Center(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => context.push('/projects/archived'),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.archive_outlined, size: 16, color: tokens.mutedForeground),
+                            const SizedBox(width: 8),
+                            Text(
+                              'View Archived Projects',
+                              style: tokens.typography.muted.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.chevron_right, size: 16, color: tokens.mutedForeground),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 );
               },
             ),
           );
         },
       ),
-      // Single, dominant primary CTA per screen (no competing duplicate in AppBar)
+      // Consistent floating action button matching Expense and Labour screens
       floatingActionButton: hasProjects
-          ? ShadButton(
-              label: 'New Project',
-              icon: const Icon(Icons.add),
-              variant: ShadButtonVariant.primary,
-              size: ShadButtonSize.large,
+          ? FloatingActionButton.extended(
+              heroTag: 'new_project_fab',
+              backgroundColor: tokens.primary,
+              foregroundColor: tokens.primaryForeground,
+              elevation: 2,
               onPressed: () => context.push('/projects/new'),
+              icon: const Icon(Icons.add, size: 20),
+              label: Text(
+                'New Project',
+                style: TextStyle(
+                  color: tokens.primaryForeground,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             )
           : null,
     );

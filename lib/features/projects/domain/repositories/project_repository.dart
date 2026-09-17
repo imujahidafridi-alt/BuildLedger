@@ -7,5 +7,7 @@ abstract class ProjectRepository {
   Future<Result<void>> archiveProject(String id);
   Future<Result<void>> restoreProject(String id);
   Future<Result<List<Project>>> getProjects({bool includeArchived = false});
+  Future<Result<List<Project>>> getActiveProjects();
+  Future<Result<List<Project>>> getArchivedProjects();
   Future<Result<Project?>> getProjectById(String id);
 }

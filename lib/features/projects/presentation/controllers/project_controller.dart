@@ -17,6 +17,29 @@ final projectsListProvider = FutureProvider<List<Project>>((ref) async {
   );
 });
 
+/// Semantic alias for projectsListProvider (active projects only).
+final activeProjectsProvider = projectsListProvider;
+
+/// Fetches archived projects ordered by archived_at DESC.
+final archivedProjectsProvider = FutureProvider<List<Project>>((ref) async {
+  final repo = ref.watch(projectRepositoryProvider);
+  final result = await repo.getArchivedProjects();
+  return result.fold(
+    onSuccess: (projects) => projects,
+    onFailure: (failure) => throw failure,
+  );
+});
+
+/// Fetches single project by ID (including archived).
+final projectByIdProvider = FutureProvider.family<Project?, String>((ref, id) async {
+  final repo = ref.watch(projectRepositoryProvider);
+  final result = await repo.getProjectById(id);
+  return result.fold(
+    onSuccess: (project) => project,
+    onFailure: (failure) => throw failure,
+  );
+});
+
 /// Holds the currently active selected project across the entire application.
 final selectedProjectProvider = StateProvider<Project?>((ref) {
   final projectsAsync = ref.watch(projectsListProvider);
@@ -31,14 +54,16 @@ final selectedProjectProvider = StateProvider<Project?>((ref) {
         previous = null;
       }
       final prev = previous;
-      if (prev != null && projects.any((p) => p.id == prev.id)) {
+      if (prev != null && !prev.isArchived && projects.any((p) => p.id == prev.id)) {
         return projects.firstWhere((p) => p.id == prev.id);
       }
       return projects.first;
     },
     orElse: () {
       try {
-        return ref.controller.state;
+        final current = ref.controller.state;
+        if (current != null && current.isArchived) return null;
+        return current;
       } catch (_) {
         return null;
       }
@@ -46,7 +71,7 @@ final selectedProjectProvider = StateProvider<Project?>((ref) {
   );
 });
 
-/// Controller for creating, updating, and archiving projects.
+/// Controller for creating, updating, archiving, and restoring projects.
 class ProjectController extends StateNotifier<AsyncValue<void>> {
   final ProjectRepository _repository;
   final Ref _ref;
@@ -60,6 +85,7 @@ class ProjectController extends StateNotifier<AsyncValue<void>> {
       onSuccess: (newProject) {
         state = const AsyncValue.data(null);
         _ref.invalidate(projectsListProvider);
+        _ref.invalidate(archivedProjectsProvider);
         _ref.read(selectedProjectProvider.notifier).state = newProject;
         return true;
       },
@@ -77,6 +103,34 @@ class ProjectController extends StateNotifier<AsyncValue<void>> {
       onSuccess: (_) {
         state = const AsyncValue.data(null);
         _ref.invalidate(projectsListProvider);
+        _ref.invalidate(archivedProjectsProvider);
+        _ref.invalidate(projectByIdProvider(id));
+
+        // Deterministic selected project safety:
+        final currentSelection = _ref.read(selectedProjectProvider);
+        if (currentSelection?.id == id) {
+          final activeList = _ref.read(projectsListProvider).value ?? [];
+          final remaining = activeList.where((p) => p.id != id).toList();
+          _ref.read(selectedProjectProvider.notifier).state = remaining.firstOrNull;
+        }
+        return true;
+      },
+      onFailure: (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+    );
+  }
+
+  Future<bool> restoreProject(String id) async {
+    state = const AsyncValue.loading();
+    final result = await _repository.restoreProject(id);
+    return result.fold(
+      onSuccess: (_) {
+        state = const AsyncValue.data(null);
+        _ref.invalidate(projectsListProvider);
+        _ref.invalidate(archivedProjectsProvider);
+        _ref.invalidate(projectByIdProvider(id));
         return true;
       },
       onFailure: (failure) {

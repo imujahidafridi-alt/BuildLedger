@@ -5,10 +5,12 @@ import 'package:build_ledger/features/dashboard/presentation/screens/dashboard_s
 import 'package:build_ledger/features/projects/presentation/screens/project_list_screen.dart';
 import 'package:build_ledger/features/projects/presentation/screens/project_form_screen.dart';
 import 'package:build_ledger/features/projects/presentation/screens/project_detail_screen.dart';
+import 'package:build_ledger/features/projects/presentation/screens/archived_projects_screen.dart';
 import 'package:build_ledger/features/expenses/presentation/screens/expense_list_screen.dart';
 import 'package:build_ledger/features/expenses/presentation/screens/expense_form_screen.dart';
 import 'package:build_ledger/features/expenses/presentation/screens/quick_expense_screen.dart';
 import 'package:build_ledger/features/expenses/presentation/screens/category_management_screen.dart';
+import 'package:build_ledger/features/expenses/domain/entities/expense.dart';
 import 'package:build_ledger/features/suppliers/presentation/screens/supplier_list_screen.dart';
 import 'package:build_ledger/features/suppliers/presentation/screens/supplier_detail_ledger_screen.dart';
 import 'package:build_ledger/features/suppliers/domain/entities/supplier.dart';
@@ -54,6 +56,11 @@ final appRouter = GoRouter(
                   builder: (context, state) => const ProjectFormScreen(),
                 ),
                 GoRoute(
+                  path: 'archived',
+                  parentNavigatorKey: _rootNavigatorKey,
+                  builder: (context, state) => const ArchivedProjectsScreen(),
+                ),
+                GoRoute(
                   path: ':id',
                   parentNavigatorKey: _rootNavigatorKey,
                   builder: (context, state) {
@@ -77,6 +84,14 @@ final appRouter = GoRouter(
                   path: 'new',
                   parentNavigatorKey: _rootNavigatorKey,
                   builder: (context, state) => const ExpenseFormScreen(),
+                ),
+                GoRoute(
+                  path: 'edit',
+                  parentNavigatorKey: _rootNavigatorKey,
+                  builder: (context, state) {
+                    final expense = state.extra as Expense?;
+                    return ExpenseFormScreen(initialExpense: expense);
+                  },
                 ),
                 GoRoute(
                   path: 'quick',

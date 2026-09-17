@@ -27,6 +27,16 @@ class _MockFailingExpenseRepository implements ExpenseRepository {
   }
 
   @override
+  Future<Result<Expense>> updateExpense(Expense expense, {String? stagedReceiptPath}) async {
+    return const Result.failure(DatabaseFailure('Disk write failed during transaction'));
+  }
+
+  @override
+  Future<Result<void>> deleteExpense(String expenseId) async {
+    return const Result.failure(DatabaseFailure('Disk write failed during transaction'));
+  }
+
+  @override
   Future<Result<List<ExpenseCategory>>> getCategories({bool activeOnly = true}) async {
     return const Result.success([]);
   }
@@ -100,6 +110,17 @@ class _MockSuccessfulExpenseRepository implements ExpenseRepository {
   Future<Result<Expense>> recordExpense(Expense expense, {String? stagedReceiptPath}) async {
     recordedExpense = expense;
     return Result.success(expense);
+  }
+
+  @override
+  Future<Result<Expense>> updateExpense(Expense expense, {String? stagedReceiptPath}) async {
+    recordedExpense = expense;
+    return Result.success(expense);
+  }
+
+  @override
+  Future<Result<void>> deleteExpense(String expenseId) async {
+    return const Result.success(null);
   }
 
   @override

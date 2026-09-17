@@ -31,14 +31,23 @@ class DatabaseHelper {
 
   static Future<Database>? _dbInitFuture;
   static bool _factoryInitialized = false;
+  static bool _schemaRepaired = false;
 
   Future<Database> get database async {
     if (_database != null && _database!.isOpen) {
+      if (!_schemaRepaired) {
+        await repairExpensesSchemaIfNeeded(_database!);
+        _schemaRepaired = true;
+      }
       return _database!;
     }
     _dbInitFuture ??= _initDatabase();
     try {
       _database = await _dbInitFuture!;
+      if (!_schemaRepaired) {
+        await repairExpensesSchemaIfNeeded(_database!);
+        _schemaRepaired = true;
+      }
       return _database!;
     } catch (e) {
       _dbInitFuture = null;
@@ -73,8 +82,10 @@ class DatabaseHelper {
     );
   }
 
-  /// Defensive integrity check: ensures categories exist without expensive repeated work.
+  /// Defensive integrity check: ensures categories exist without expensive repeated work
+  /// and repairs any corrupted table schemas.
   Future<void> _onOpen(Database db) async {
+    await repairExpensesSchemaIfNeeded(db);
     try {
       final rows = await db.rawQuery('SELECT COUNT(*) as count FROM expense_categories;');
       final count = rows.isNotEmpty ? (rows.first['count'] as int?) : 0;
@@ -84,6 +95,64 @@ class DatabaseHelper {
       }
     } catch (e) {
       AppLogger.warning('Defensive category count check skipped: $e', tag: 'DatabaseHelper');
+    }
+  }
+
+  /// Defensive self-healing: repairs foreign key references in the expenses table
+  /// if corrupted by SQLite's table rename during v1 -> v2 migration.
+  static Future<void> repairExpensesSchemaIfNeeded(Database db) async {
+    try {
+      final rows = await db.rawQuery(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'expenses';",
+      );
+      if (rows.isEmpty) return;
+      final sql = rows.first['sql'] as String? ?? '';
+      if (sql.contains('legacy_expense_categories')) {
+        AppLogger.warning(
+          'Detected corrupted foreign key to legacy_expense_categories in expenses table. Repairing schema...',
+          tag: 'DatabaseHelper',
+        );
+
+        await db.execute('PRAGMA foreign_keys = OFF;');
+        await db.transaction((txn) async {
+          await txn.execute('''
+            CREATE TABLE expenses_repaired (
+              id TEXT PRIMARY KEY NOT NULL,
+              project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+              category_id TEXT NOT NULL REFERENCES expense_categories(id) ON DELETE RESTRICT,
+              supplier_id TEXT REFERENCES suppliers(id) ON DELETE RESTRICT,
+              amount_minor INTEGER NOT NULL,
+              payment_method TEXT NOT NULL,
+              expense_date TEXT NOT NULL,
+              description TEXT,
+              receipt_path TEXT,
+              status TEXT NOT NULL DEFAULT 'active',
+              voided_at TEXT,
+              void_reason TEXT,
+              voided_by TEXT,
+              notes TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sync_status TEXT NOT NULL DEFAULT 'local',
+              server_version INTEGER NOT NULL DEFAULT 1,
+              CONSTRAINT chk_expense_amount CHECK (amount_minor > 0),
+              CONSTRAINT chk_expense_status CHECK (status IN ('active', 'voided')),
+              CONSTRAINT chk_expense_void_consistency CHECK (
+                (status = 'active' AND voided_at IS NULL AND void_reason IS NULL) OR
+                (status = 'voided' AND voided_at IS NOT NULL AND void_reason IS NOT NULL)
+              )
+            );
+          ''');
+
+          await txn.execute('INSERT INTO expenses_repaired SELECT * FROM expenses;');
+          await txn.execute('DROP TABLE expenses;');
+          await txn.execute('ALTER TABLE expenses_repaired RENAME TO expenses;');
+        });
+        await db.execute('PRAGMA foreign_keys = ON;');
+        AppLogger.info('Successfully repaired expenses table schema!', tag: 'DatabaseHelper');
+      }
+    } catch (e) {
+      AppLogger.error('Failed to check/repair expenses schema: $e', tag: 'DatabaseHelper', error: e);
     }
   }
 
@@ -536,6 +605,7 @@ class DatabaseHelper {
     // 10. Re-enable foreign keys and reset legacy_alter_table
     await db.execute('PRAGMA legacy_alter_table = OFF;');
     await db.execute('PRAGMA foreign_keys = ON;');
+    await repairExpensesSchemaIfNeeded(db);
     AppLogger.info('Successfully migrated database to v2', tag: 'DatabaseHelper');
   }
 
