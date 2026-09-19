@@ -27,7 +27,6 @@ void main() {
 
     expect(find.text('TOP EXPENSE CATEGORIES'), findsOneWidget);
     expect(find.text('View Breakdown'), findsOneWidget);
-    expect(find.text('View Detailed Breakdown'), findsOneWidget);
 
     // Tap View Breakdown header button
     await tester.tap(find.text('View Breakdown'));
@@ -54,11 +53,7 @@ void main() {
     // Dismiss again
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
-
-    // Now test tapping the footer button
-    await tester.tap(find.text('View Detailed Breakdown'));
-    await tester.pumpAndSettle();
-    expect(find.text('Category Cost Breakdown'), findsOneWidget);
+    expect(find.text('Category Cost Breakdown'), findsNothing);
   });
 
   testWidgets('CategoryBreakdownSheet shows empty state when breakdown is empty', (tester) async {

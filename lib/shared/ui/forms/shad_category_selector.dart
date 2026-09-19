@@ -609,7 +609,19 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
         // Subcategories
         ...subcategories.map((sub) {
           final isSelected = widget.selectedCategory?.id == sub.id;
-          final aliasHint = sub.aliases.isNotEmpty ? sub.aliases.take(3).join(', ') : null;
+          final cleanAliases = sub.aliases
+              .map((a) => a.trim().replaceAll(RegExp(r'^["\x27\[\]\s]+|["\x27\[\]\s]+$'), '').trim())
+              .where((a) => a.isNotEmpty)
+              .toList();
+
+          String? subtitleText;
+          if (cleanAliases.isNotEmpty) {
+            final examples = cleanAliases.take(3).map((a) {
+              if (a.isEmpty) return a;
+              return a[0].toUpperCase() + a.substring(1);
+            }).join(', ');
+            subtitleText = 'e.g. $examples';
+          }
 
           return ListTile(
             dense: true,
@@ -622,9 +634,9 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                 color: isSelected ? tokens.primary : tokens.foreground,
               ),
             ),
-            subtitle: aliasHint != null
+            subtitle: subtitleText != null
                 ? Text(
-                    aliasHint,
+                    subtitleText,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 11, color: tokens.mutedForeground),

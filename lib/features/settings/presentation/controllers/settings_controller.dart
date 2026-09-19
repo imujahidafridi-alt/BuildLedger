@@ -1,8 +1,73 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:build_ledger/core/formatting/money_formatter.dart';
 import 'package:build_ledger/features/settings/domain/entities/contractor_profile.dart';
 import 'package:build_ledger/features/settings/domain/entities/database_diagnostics.dart';
 import 'package:build_ledger/features/settings/data/app_settings_repository.dart';
 import 'package:build_ledger/features/settings/data/database_diagnostics_service.dart';
+
+class CurrencyConfig {
+  final String code;
+  final String symbol;
+  final String name;
+  final String flag;
+
+  const CurrencyConfig({
+    required this.code,
+    required this.symbol,
+    required this.name,
+    required this.flag,
+  });
+}
+
+const List<CurrencyConfig> kSupportedCurrencies = [
+  CurrencyConfig(code: 'PKR', symbol: 'Rs', name: 'Pakistani Rupee', flag: '🇵🇰'),
+  CurrencyConfig(code: 'AED', symbol: 'AED', name: 'UAE Dirham', flag: '🇦🇪'),
+  CurrencyConfig(code: 'SAR', symbol: 'SAR', name: 'Saudi Riyal', flag: '🇸🇦'),
+  CurrencyConfig(code: 'USD', symbol: '\$', name: 'US Dollar', flag: '🇺🇸'),
+  CurrencyConfig(code: 'GBP', symbol: '£', name: 'British Pound', flag: '🇬🇧'),
+  CurrencyConfig(code: 'EUR', symbol: '€', name: 'Euro', flag: '🇪🇺'),
+  CurrencyConfig(code: 'QAR', symbol: 'QAR', name: 'Qatari Riyal', flag: '🇶🇦'),
+  CurrencyConfig(code: 'OMR', symbol: 'OMR', name: 'Omani Rial', flag: '🇴🇲'),
+  CurrencyConfig(code: 'KWD', symbol: 'KWD', name: 'Kuwaiti Dinar', flag: '🇰🇼'),
+  CurrencyConfig(code: 'BHD', symbol: 'BHD', name: 'Bahraini Dinar', flag: '🇧🇭'),
+  CurrencyConfig(code: 'INR', symbol: '₹', name: 'Indian Rupee', flag: '🇮🇳'),
+  CurrencyConfig(code: 'BDT', symbol: '৳', name: 'Bangladeshi Taka', flag: '🇧🇩'),
+  CurrencyConfig(code: 'CAD', symbol: 'CA\$', name: 'Canadian Dollar', flag: '🇨🇦'),
+  CurrencyConfig(code: 'AUD', symbol: 'A\$', name: 'Australian Dollar', flag: '🇦🇺'),
+];
+
+class BaseCurrencyNotifier extends StateNotifier<CurrencyConfig> {
+  final AppSettingsRepository _repository;
+
+  BaseCurrencyNotifier(this._repository)
+      : super(const CurrencyConfig(code: 'PKR', symbol: 'Rs', name: 'Pakistani Rupee', flag: '🇵🇰')) {
+    loadCurrency();
+  }
+
+  Future<void> loadCurrency() async {
+    final code = await _repository.getBaseCurrencyCode();
+    final symbol = await _repository.getBaseCurrencySymbol();
+    final match = kSupportedCurrencies.firstWhere(
+      (c) => c.code == code,
+      orElse: () => CurrencyConfig(code: code, symbol: symbol, name: code, flag: '🌐'),
+    );
+    state = match;
+    MoneyFormatter.setCurrency(code: match.code, symbol: match.symbol);
+  }
+
+  Future<void> setCurrency(CurrencyConfig config) async {
+    state = config;
+    MoneyFormatter.setCurrency(code: config.code, symbol: config.symbol);
+    await _repository.setBaseCurrencyCode(config.code);
+    await _repository.setBaseCurrencySymbol(config.symbol);
+  }
+}
+
+final baseCurrencyProvider =
+    StateNotifierProvider<BaseCurrencyNotifier, CurrencyConfig>((ref) {
+  final repo = ref.watch(appSettingsRepositoryProvider);
+  return BaseCurrencyNotifier(repo);
+});
 
 final appSettingsRepositoryProvider = Provider<AppSettingsRepository>((ref) {
   return SharedPrefsAppSettingsRepository();

@@ -154,6 +154,10 @@ void main() {
       expect(find.text('Building Materials'), findsOneWidget);
       expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
       expect(find.text('Steel / Saria'), findsOneWidget);
+      expect(find.text('e.g. Saria, Rebar, Grade 60'), findsOneWidget);
+      expect(find.text('e.g. Bestway, Fauji, Lucky'), findsOneWidget);
+      expect(find.textContaining('['), findsNothing);
+      expect(find.textContaining(']'), findsNothing);
 
       // Tap Steel / Saria leaf
       await tester.tap(find.text('Steel / Saria'));

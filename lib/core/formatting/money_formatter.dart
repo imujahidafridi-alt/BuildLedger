@@ -1,15 +1,27 @@
 import 'package:intl/intl.dart';
 import 'package:build_ledger/core/domain/money.dart';
 
-/// Centralized deterministic formatter for PKR currency.
+/// Centralized deterministic formatter for multi-currency financial amounts.
 class MoneyFormatter {
   static final NumberFormat _standardFormatter = NumberFormat('#,##0', 'en_US');
   static final NumberFormat _decimalFormatter = NumberFormat('#,##0.00', 'en_US');
 
-  /// Formats [Money] to standard display (e.g. "Rs 18,500" or "Rs 18,500.50").
-  /// If the minor units have fractional paisas, includes 2 decimal places.
+  static String _currencySymbol = 'Rs';
+  static String _currencyCode = 'PKR';
+
+  static String get currencySymbol => _currencySymbol;
+  static String get currencyCode => _currencyCode;
+
+  /// Updates active currency code and symbol across the application.
+  static void setCurrency({required String code, required String symbol}) {
+    _currencyCode = code;
+    _currencySymbol = symbol;
+  }
+
+  /// Formats [Money] to standard display (e.g. "Rs 18,500" or "$ 18,500.50").
+  /// If the minor units have fractional paisas/cents, includes 2 decimal places.
   static String format(Money money, {bool showPrefix = true, bool forceDecimals = false}) {
-    final prefix = showPrefix ? 'Rs ' : '';
+    final prefix = showPrefix ? '$_currencySymbol ' : '';
     final isNegative = money.isNegative;
     final absMinor = money.minorUnits.abs();
 
@@ -29,9 +41,9 @@ class MoneyFormatter {
     return '$prefix$formattedNumber';
   }
 
-  /// Compact notation for executive dashboard counters and charts (e.g. "Rs 1.25M", "Rs 850K").
+  /// Compact notation for executive dashboard counters and charts (e.g. "Rs 1.25M", "$ 850K").
   static String formatCompact(Money money, {bool showPrefix = true}) {
-    final prefix = showPrefix ? 'Rs ' : '';
+    final prefix = showPrefix ? '$_currencySymbol ' : '';
     final isNegative = money.isNegative;
     final absMinor = money.minorUnits.abs();
     final major = absMinor / 100.0;

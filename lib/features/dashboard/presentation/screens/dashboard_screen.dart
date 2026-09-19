@@ -8,16 +8,41 @@ import 'package:build_ledger/features/expenses/presentation/widgets/app_expense_
 import 'package:build_ledger/features/expenses/presentation/widgets/expense_detail_sheet.dart';
 import 'package:build_ledger/features/projects/presentation/controllers/project_controller.dart';
 import 'package:build_ledger/features/projects/presentation/widgets/project_selector_sheet.dart';
+import 'package:build_ledger/features/settings/presentation/controllers/settings_controller.dart';
+import 'package:build_ledger/features/settings/presentation/dialogs/contractor_profile_sheet.dart';
+import 'package:build_ledger/features/settings/presentation/dialogs/welcome_contractor_sheet.dart';
+import 'package:build_ledger/features/settings/presentation/dialogs/currency_selector_sheet.dart';
 import 'package:build_ledger/shared/ui/shad_ui.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final repo = ref.read(appSettingsRepositoryProvider);
+      final hasSeen = await repo.hasSeenProfileOnboarding();
+      final profile = ref.read(contractorProfileProvider);
+      if (!hasSeen && !profile.isConfigured && mounted) {
+        await WelcomeContractorSheet.show(context);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tokens = context.shad;
     final summaryAsync = ref.watch(projectSummaryProvider);
     final projectsAsync = ref.watch(projectsListProvider);
+    final profile = ref.watch(contractorProfileProvider);
+    final currentCurrency = ref.watch(baseCurrencyProvider);
     final bottomInset = MediaQuery.paddingOf(context).bottom + 24;
 
     return Scaffold(
@@ -64,12 +89,203 @@ class DashboardScreen extends ConsumerWidget {
         ),
         data: (projects) {
           if (projects.isEmpty) {
-            return ShadEmptyState(
-              icon: Icons.apartment,
-              title: 'Welcome to BuildLedger',
-              message: 'Create your first construction project to track expenses, suppliers, and site budgets.',
-              actionLabel: 'Create Project',
-              onAction: () => context.push('/projects/new'),
+            return ListView(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset),
+              children: [
+                ShadCard(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: tokens.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: tokens.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: Center(
+                          child: Icon(Icons.apartment, color: tokens.primary, size: 30),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Welcome to BuildLedger', style: tokens.typography.h3, textAlign: TextAlign.center),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Set up your construction firm profile and launch your first project.',
+                        style: tokens.typography.muted,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ShadCard(
+                  onTap: () => WelcomeContractorSheet.show(context),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: profile.isConfigured
+                              ? tokens.success.withValues(alpha: 0.15)
+                              : tokens.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            profile.isConfigured ? Icons.check_circle : Icons.business,
+                            color: profile.isConfigured ? tokens.success : tokens.warning,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '1. Contractor Profile',
+                                    style: tokens.typography.p.copyWith(fontWeight: FontWeight.w600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ShadBadge(
+                                  label: profile.isConfigured ? 'READY' : 'REQUIRED',
+                                  variant: profile.isConfigured
+                                      ? ShadBadgeVariant.success
+                                      : ShadBadgeVariant.warning,
+                                  isSmall: true,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              profile.isConfigured
+                                  ? '${profile.name}${profile.taxId.isNotEmpty ? " • NTN: ${profile.taxId}" : ""}'
+                                  : 'Enter company name & NTN for official statements',
+                              style: tokens.typography.small.copyWith(color: tokens.mutedForeground),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: tokens.mutedForeground, size: 20),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ShadCard(
+                  onTap: () => CurrencySelectorSheet.show(context),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: tokens.muted,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Text(
+                            currentCurrency.flag,
+                            style: const TextStyle(fontSize: 20),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '2. Base Currency',
+                                    style: tokens.typography.p.copyWith(fontWeight: FontWeight.w600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ShadBadge(
+                                  label: '${currentCurrency.code} (${currentCurrency.symbol})',
+                                  variant: ShadBadgeVariant.neutral,
+                                  isSmall: true,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${currentCurrency.name} • Tap to switch standard',
+                              style: tokens.typography.small.copyWith(color: tokens.mutedForeground),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: tokens.mutedForeground, size: 20),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ShadCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: tokens.primary.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Icon(Icons.add_business, color: tokens.primary, size: 22),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '3. First Construction Project',
+                                  style: tokens.typography.p.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                Text(
+                                  'Add your active site to start logging expenses',
+                                  style: tokens.typography.small.copyWith(color: tokens.mutedForeground),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      ShadButton(
+                        label: 'Create Project',
+                        icon: const Icon(Icons.add, size: 18),
+                        variant: ShadButtonVariant.primary,
+                        onPressed: () => context.push('/projects/new'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             );
           }
 
@@ -89,6 +305,56 @@ class DashboardScreen extends ConsumerWidget {
                 child: ListView(
                   padding: EdgeInsets.fromLTRB(16, 8, 16, bottomInset),
                   children: [
+                    if (!profile.isConfigured) ...[
+                      ShadCard(
+                        onTap: () => ContractorProfileSheet.show(context),
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: tokens.warning.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Icon(Icons.business_outlined, color: tokens.warning, size: 20),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Set Up Contractor Profile',
+                                    style: tokens.typography.p.copyWith(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Brand exported PDF reports with your company name & NTN',
+                                    style: tokens.typography.small.copyWith(
+                                      color: tokens.mutedForeground,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ShadButton.outline(
+                              label: 'Set Up',
+                              size: ShadButtonSize.small,
+                              onPressed: () => ContractorProfileSheet.show(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     // 1. Budget Gauge & Financial Pillars Card
                     BudgetGaugeCard(
                       summary: summary,

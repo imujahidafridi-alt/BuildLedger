@@ -302,12 +302,17 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                                                   decoration: sub.isActive ? null : TextDecoration.lineThrough,
                                                 ),
                                               ),
-                                              subtitle: Text(
-                                                sub.aliases.isNotEmpty ? sub.aliases.join(', ') : sub.code,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(fontSize: 11, color: tokens.mutedForeground),
-                                              ),
+                                               subtitle: Text(
+                                                 sub.aliases.isNotEmpty
+                                                     ? sub.aliases
+                                                         .map((a) => a.trim().replaceAll(RegExp(r'^["\x27\[\]\s]+|["\x27\[\]\s]+$'), '').trim())
+                                                         .where((a) => a.isNotEmpty)
+                                                         .join(', ')
+                                                     : sub.code,
+                                                 maxLines: 1,
+                                                 overflow: TextOverflow.ellipsis,
+                                                 style: TextStyle(fontSize: 11, color: tokens.mutedForeground),
+                                               ),
                                               trailing: Switch(
                                                 value: sub.isActive,
                                                 activeTrackColor: tokens.primary,

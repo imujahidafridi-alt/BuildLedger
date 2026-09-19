@@ -63,8 +63,27 @@ void main() {
       final backupTimestamp = await repo.getLastBackupTimestamp();
       expect(backupTimestamp, isNull);
 
-      expect(repo.getBaseCurrencyCode(), equals('PKR'));
-      expect(repo.getBaseCurrencySymbol(), equals('Rs'));
+      expect(await repo.getBaseCurrencyCode(), equals('PKR'));
+      expect(await repo.getBaseCurrencySymbol(), equals('Rs'));
+      expect(await repo.hasSeenProfileOnboarding(), isFalse);
+    });
+
+    test('Persists and restores base currency standard', () async {
+      final repo = SharedPrefsAppSettingsRepository();
+
+      await repo.setBaseCurrencyCode('AED');
+      await repo.setBaseCurrencySymbol('AED');
+
+      expect(await repo.getBaseCurrencyCode(), equals('AED'));
+      expect(await repo.getBaseCurrencySymbol(), equals('AED'));
+    });
+
+    test('Persists onboarding seen state', () async {
+      final repo = SharedPrefsAppSettingsRepository();
+
+      expect(await repo.hasSeenProfileOnboarding(), isFalse);
+      await repo.setSeenProfileOnboarding(true);
+      expect(await repo.hasSeenProfileOnboarding(), isTrue);
     });
 
     test('Persists and restores contractor profile', () async {

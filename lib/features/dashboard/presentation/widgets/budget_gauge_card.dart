@@ -15,7 +15,7 @@ class BudgetGaugeCard extends StatelessWidget {
   ShadBadgeVariant _getUtilizationVariant(int percent) {
     if (percent >= 90) return ShadBadgeVariant.destructive;
     if (percent >= 75) return ShadBadgeVariant.warning;
-    return ShadBadgeVariant.neutral;
+    return ShadBadgeVariant.outline;
   }
 
   @override
@@ -151,10 +151,11 @@ class BudgetGaugeCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: tokens.muted,
+                    color: tokens.muted.withValues(alpha: 0.6),
                     borderRadius: ShadRadii.roundedMd,
+                    border: Border.all(color: tokens.border.withValues(alpha: 0.6)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,14 +163,14 @@ class BudgetGaugeCard extends StatelessWidget {
                       Row(
                         children: [
                           Icon(Icons.account_balance_wallet, size: 14, color: tokens.primary),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 5),
                           Text(
                             'CASH OUTFLOW',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: tokens.mutedForeground),
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.3, color: tokens.mutedForeground),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       MoneyText(summary.cashOutflow, style: MoneyTextStyle.body),
                     ],
                   ),
@@ -178,33 +179,54 @@ class BudgetGaugeCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: tokens.muted,
+                    color: tokens.muted.withValues(alpha: 0.6),
                     borderRadius: ShadRadii.roundedMd,
+                    border: Border.all(color: tokens.border.withValues(alpha: 0.6)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Icon(
-                            Icons.store,
-                            size: 14,
-                            color: summary.supplierPayables.isPositive ? tokens.destructive : tokens.success,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'SUPPLIER PAYABLE',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: tokens.mutedForeground),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.store,
+                                size: 14,
+                                color: summary.supplierPayables.isPositive ? tokens.destructive : tokens.success,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'SUPPLIER PAYABLE',
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.3, color: tokens.mutedForeground),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      MoneyText(
-                        summary.supplierPayables,
-                        style: MoneyTextStyle.body,
-                        semanticColor: summary.supplierPayables.isPositive ? MoneySemanticColor.alert : MoneySemanticColor.profit,
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          MoneyText(
+                            summary.supplierPayables,
+                            style: MoneyTextStyle.body,
+                            semanticColor: summary.supplierPayables.isPositive ? MoneySemanticColor.alert : MoneySemanticColor.profit,
+                          ),
+                          if (summary.supplierPayables.minorUnits == 0)
+                            Text(
+                              'CLEARED',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.4,
+                                color: tokens.success,
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),

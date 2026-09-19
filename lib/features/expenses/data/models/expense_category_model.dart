@@ -1,13 +1,42 @@
+import 'dart:convert';
 import 'package:build_ledger/features/expenses/domain/entities/expense_category.dart';
 
 class ExpenseCategoryModel {
+  static String _cleanAlias(String s) {
+    return s.trim().replaceAll(RegExp(r'^["\x27\[\]\s]+|["\x27\[\]\s]+$'), '').trim();
+  }
+
   static ExpenseCategory fromMap(Map<String, dynamic> map) {
     List<String> parseAliases(dynamic raw) {
       if (raw == null) return const [];
-      if (raw is List) return raw.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
-      final str = raw.toString();
-      if (str.isEmpty) return const [];
-      return str.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      if (raw is List) {
+        return raw
+            .map((e) => _cleanAlias(e.toString()))
+            .where((s) => s.isNotEmpty)
+            .toList();
+      }
+      final str = raw.toString().trim();
+      if (str.isEmpty || str == '[]') return const [];
+
+      // If stored as JSON string (e.g. '["cleaning", "clearing", "demolition"]')
+      if (str.startsWith('[') && str.endsWith(']')) {
+        try {
+          final decoded = jsonDecode(str);
+          if (decoded is List) {
+            return decoded
+                .map((e) => _cleanAlias(e.toString()))
+                .where((s) => s.isNotEmpty)
+                .toList();
+          }
+        } catch (_) {}
+      }
+
+      // If stored as comma-separated or unescaped string
+      return str
+          .split(',')
+          .map((s) => _cleanAlias(s))
+          .where((s) => s.isNotEmpty)
+          .toList();
     }
 
     final createdAt = map['created_at'] != null
@@ -53,7 +82,7 @@ class ExpenseCategoryModel {
       'sort_order': category.sortOrder,
       'is_active': category.isActive ? 1 : 0,
       'is_system': category.isSystem ? 1 : 0,
-      'aliases': category.aliases.join(','),
+      'aliases': jsonEncode(category.aliases),
       'created_at': category.createdAt.toIso8601String(),
       'updated_at': category.updatedAt.toIso8601String(),
     };

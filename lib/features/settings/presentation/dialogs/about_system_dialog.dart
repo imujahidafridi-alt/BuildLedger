@@ -31,6 +31,7 @@ class AboutSystemDialog extends StatelessWidget {
     final platform = _getPlatformDescription();
     final info = '''
 BuildLedger 1.0.0 (Build 1)
+Lead Developer: Mujahid Afridi (afridilabz@gmail.com)
 Platform: $platform
 Target: ${defaultTargetPlatform.name}
 Architecture: Local Zero-Latency Offline
@@ -42,7 +43,7 @@ Status: Production Grade
     ShadToast.show(
       context,
       title: 'System Info Copied',
-      message: 'Diagnostic details copied to clipboard.',
+      message: 'Diagnostic & developer details copied to clipboard.',
       variant: ShadToastVariant.success,
     );
   }
@@ -94,9 +95,9 @@ Status: Production Grade
               style: tokens.typography.small.copyWith(color: tokens.mutedForeground),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Divider(color: tokens.border, height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -144,10 +145,59 @@ Status: Production Grade
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+          Divider(color: tokens.border, height: 1),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Lead Developer', style: tokens.typography.muted),
+              const SizedBox(width: 12),
+              const Text(
+                'Mujahid Afridi',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Email / Contact', style: tokens.typography.muted),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(const ClipboardData(text: 'afridilabz@gmail.com'));
+                  ShadToast.show(
+                    context,
+                    title: 'Email Copied',
+                    message: 'afridilabz@gmail.com copied to clipboard',
+                    variant: ShadToastVariant.success,
+                  );
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'afridilabz@gmail.com',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        color: tokens.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.copy, size: 12, color: tokens.primary),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           Text(
             'High-precision financial control and site expense tracking for modern construction contractors.',
-            style: tokens.typography.muted.copyWith(fontSize: 12),
+            style: tokens.typography.muted.copyWith(fontSize: 11),
             textAlign: TextAlign.center,
           ),
         ],

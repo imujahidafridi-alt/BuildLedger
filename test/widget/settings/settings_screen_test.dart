@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:build_ledger/core/design_system/theme.dart';
 import 'package:build_ledger/features/settings/presentation/screens/settings_screen.dart';
 import 'package:build_ledger/features/settings/presentation/dialogs/contractor_profile_sheet.dart';
+import 'package:build_ledger/features/settings/presentation/dialogs/currency_selector_sheet.dart';
 import 'package:build_ledger/features/settings/presentation/dialogs/database_diagnostics_sheet.dart';
 import 'package:build_ledger/features/settings/presentation/dialogs/about_system_dialog.dart';
 import 'package:build_ledger/features/suppliers/presentation/controllers/supplier_controller.dart';
@@ -135,6 +136,23 @@ void main() {
       expect(find.byType(AboutSystemDialog), findsOneWidget);
       expect(find.text('About BuildLedger'), findsOneWidget);
       expect(find.text('Copy System Info'), findsOneWidget);
+      expect(find.text('Mujahid Afridi'), findsOneWidget);
+      expect(find.text('afridilabz@gmail.com'), findsOneWidget);
+    });
+
+    testWidgets('Tapping Base Currency opens CurrencySelectorSheet', (tester) async {
+      configureViewport(tester);
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Base Currency'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CurrencySelectorSheet), findsOneWidget);
+      expect(find.text('Select Base Currency'), findsOneWidget);
+      expect(find.text('UAE Dirham'), findsOneWidget);
+      expect(find.text('Saudi Riyal'), findsOneWidget);
+      expect(find.text('US Dollar'), findsOneWidget);
     });
   });
 }

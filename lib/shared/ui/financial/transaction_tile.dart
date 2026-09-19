@@ -165,6 +165,14 @@ class ShadTransactionTile extends StatelessWidget {
                   ],
                 ],
               ),
+              if (onTap != null) ...[
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: tokens.mutedForeground.withValues(alpha: 0.6),
+                ),
+              ],
             ],
           ),
         ),

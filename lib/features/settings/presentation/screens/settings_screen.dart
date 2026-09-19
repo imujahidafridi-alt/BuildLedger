@@ -8,6 +8,7 @@ import 'package:build_ledger/features/suppliers/presentation/controllers/supplie
 import 'package:build_ledger/features/labour/presentation/controllers/labour_controller.dart';
 import 'package:build_ledger/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:build_ledger/features/settings/presentation/dialogs/contractor_profile_sheet.dart';
+import 'package:build_ledger/features/settings/presentation/dialogs/currency_selector_sheet.dart';
 import 'package:build_ledger/features/settings/presentation/dialogs/shift_hours_selector_sheet.dart';
 import 'package:build_ledger/features/settings/presentation/dialogs/database_diagnostics_sheet.dart';
 import 'package:build_ledger/features/settings/presentation/dialogs/about_system_dialog.dart';
@@ -24,6 +25,7 @@ class SettingsScreen extends ConsumerWidget {
     final tokens = context.shad;
     final currentThemeMode = ref.watch(themeModeProvider);
     final profile = ref.watch(contractorProfileProvider);
+    final currentCurrency = ref.watch(baseCurrencyProvider);
     final shiftHoursX100 = ref.watch(standardShiftHoursProvider);
     final suppliersAsync = ref.watch(suppliersListProvider);
     final labourAsync = ref.watch(labourEntriesProvider);
@@ -280,7 +282,7 @@ class SettingsScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              // Base Currency (Centralized display)
+              // Base Currency (Dynamic Selector)
               ShadSectionItem(
                 leading: Container(
                   width: 36,
@@ -289,22 +291,21 @@ class SettingsScreen extends ConsumerWidget {
                     color: tokens.muted,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Center(child: Icon(Icons.payments_outlined, color: tokens.mutedForeground, size: 20)),
+                  child: Center(
+                    child: Text(
+                      currentCurrency.flag,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                  ),
                 ),
                 title: const Text('Base Currency'),
-                subtitle: const Text('PKR (Pakistani Rupee) • Minor units (paisas)'),
+                subtitle: Text('${currentCurrency.code} (${currentCurrency.name}) • Formatting standard'),
                 trailing: ShadBadge(
-                  label: 'PKR (Rs)',
-                  variant: ShadBadgeVariant.neutral,
+                  label: '${currentCurrency.code} (${currentCurrency.symbol})',
+                  variant: ShadBadgeVariant.warning,
                   isSmall: true,
                 ),
-                onTap: () {
-                  ShadToast.show(
-                    context,
-                    title: 'Currency Standard',
-                    message: 'BuildLedger deterministically records all transactions in PKR minor units (paisas).',
-                  );
-                },
+                onTap: () => CurrencySelectorSheet.show(context),
               ),
               // Standard Shift Duration
               ShadSectionItem(

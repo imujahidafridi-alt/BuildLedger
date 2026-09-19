@@ -102,7 +102,7 @@ class CategorySpendCard extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: categoryBreakdown.length,
-            separatorBuilder: (_, _) => const ShadSeparator(margin: EdgeInsets.symmetric(vertical: 8)),
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final entry = categoryBreakdown.entries.elementAt(index);
               final group = entry.key;
@@ -116,32 +116,47 @@ class CategorySpendCard extends StatelessWidget {
                   onTap: () => _openBreakdown(context),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: tokens.muted,
-                            borderRadius: ShadRadii.roundedMd,
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: tokens.muted,
+                                borderRadius: ShadRadii.roundedMd,
+                              ),
+                              child: Icon(_getGroupIcon(group), size: 16, color: tokens.primary),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                group,
+                                style: tokens.typography.p.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            ShadBadge(
+                              label: '$percent%',
+                              variant: ShadBadgeVariant.outline,
+                              isSmall: true,
+                            ),
+                            const SizedBox(width: 10),
+                            MoneyText(
+                              amount,
+                              style: MoneyTextStyle.body,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: (percent / 100.0).clamp(0.01, 1.0),
+                            minHeight: 3.5,
+                            backgroundColor: tokens.border.withValues(alpha: 0.3),
+                            valueColor: AlwaysStoppedAnimation<Color>(tokens.primary),
                           ),
-                          child: Icon(_getGroupIcon(group), size: 16, color: tokens.primary),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            group,
-                            style: tokens.typography.p.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        ShadBadge(
-                          label: '$percent%',
-                          variant: ShadBadgeVariant.outline,
-                          isSmall: true,
-                        ),
-                        const SizedBox(width: 10),
-                        MoneyText(
-                          amount,
-                          style: MoneyTextStyle.body,
                         ),
                       ],
                     ),
@@ -149,38 +164,6 @@ class CategorySpendCard extends StatelessWidget {
                 ),
               );
             },
-          ),
-          const SizedBox(height: 12),
-          const ShadSeparator(),
-          const SizedBox(height: 8),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: ShadRadii.roundedMd,
-              onTap: () => _openBreakdown(context),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.pie_chart_outline,
-                      size: 15,
-                      color: tokens.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'View Detailed Breakdown',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: tokens.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ),
         ],
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:build_ledger/core/domain/money.dart';
 import 'package:build_ledger/core/formatting/money_formatter.dart';
 import 'package:build_ledger/core/design_system/tokens.dart';
@@ -76,33 +77,34 @@ class MoneyText extends StatelessWidget {
     TextStyle textStyle;
     switch (style) {
       case MoneyTextStyle.display:
-        textStyle = tokens.typography.mono.copyWith(
+        textStyle = GoogleFonts.inter(
           fontSize: 26,
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.8,
+          letterSpacing: -0.6,
           color: color,
         );
       case MoneyTextStyle.headline:
-        textStyle = tokens.typography.mono.copyWith(
+        textStyle = GoogleFonts.inter(
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.5,
+          letterSpacing: -0.4,
           color: color,
         );
       case MoneyTextStyle.title:
-        textStyle = tokens.typography.mono.copyWith(
+        textStyle = GoogleFonts.inter(
           fontSize: 16,
           fontWeight: FontWeight.w700,
+          letterSpacing: -0.2,
           color: color,
         );
       case MoneyTextStyle.body:
-        textStyle = tokens.typography.mono.copyWith(
+        textStyle = GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.w600,
           color: color,
         );
       case MoneyTextStyle.caption:
-        textStyle = tokens.typography.mono.copyWith(
+        textStyle = GoogleFonts.inter(
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: color,
@@ -114,9 +116,50 @@ class MoneyText extends StatelessWidget {
         : MoneyFormatter.format(money);
     final displayText = (showSign && money.isPositive) ? '+$formatted' : formatted;
 
-    return Text(
-      displayText,
-      style: textStyle,
+    String sign = '';
+    String remainder = displayText;
+    if (remainder.startsWith('+')) {
+      sign = '+';
+      remainder = remainder.substring(1);
+    } else if (remainder.startsWith('-')) {
+      sign = '-';
+      remainder = remainder.substring(1);
+    }
+
+    final prefix = '${MoneyFormatter.currencySymbol} ';
+    final hasPrefix = remainder.startsWith(prefix);
+    final numberPart = hasPrefix ? remainder.substring(prefix.length) : remainder;
+
+    return Text.rich(
+      TextSpan(
+        style: textStyle,
+        children: [
+          if (sign.isNotEmpty)
+            TextSpan(
+              text: sign,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          if (hasPrefix)
+            TextSpan(
+              text: prefix,
+              style: TextStyle(
+                fontSize: textStyle.fontSize != null ? textStyle.fontSize! * 0.88 : null,
+                fontWeight: FontWeight.w600,
+                color: color.withValues(alpha: 0.82),
+                letterSpacing: -0.2,
+              ),
+            ),
+          TextSpan(
+            text: numberPart,
+            style: const TextStyle(
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
